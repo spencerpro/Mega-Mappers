@@ -1,67 +1,130 @@
 import pygame
 import math
+import json
 from codex_engine.config import SCREEN_WIDTH, SCREEN_HEIGHT
 from codex_engine.ui.renderers.image_strategy import ImageMapStrategy
 from codex_engine.ui.widgets import Slider, Button, MarkerModal
 from codex_engine.generators.world_gen import WorldGenerator
 from codex_engine.core.db_manager import DBManager
+from codex_engine.utils.spline import calculate_catmull_rom
+
+# --- COLORS (Must match exactly) ---
+COLOR_ROAD = (160, 82, 45)
+COLOR_RIVER = (80, 120, 255)
 
 class MapViewer:
     def __init__(self, screen, theme_manager):
         self.screen = screen
         self.theme = theme_manager
         
-        # Camera & Grid
+        # View State
         self.cam_x, self.cam_y, self.zoom = 0, 0, 1.0
         self.show_grid, self.grid_type, self.grid_size = True, "HEX", 64
         
-        # State
         self.current_node = None
         self.render_strategy = None
-        self.markers, self.selected_marker, self.dragging_marker = [], None, None
-        self.drag_offset, self.active_modal, self.pending_click_pos = (0,0), None, None
-        self.hovered_marker = None
         
-        # UI Resources
+        # Interaction State
+        self.markers = []
+        self.selected_marker = None
+        self.dragging_marker = None
+        self.drag_offset = (0,0)
+        self.hovered_marker = None
+        self.active_modal = None
+        self.pending_click_pos = None
+        
+        # Vector State
+        self.vectors = []
+        self.active_vector = None 
+        self.selected_point_idx = None
+        self.dragging_point = False
+        
         self.font_ui = pygame.font.Font(None, 24)
         self.font_title = pygame.font.Font(None, 32)
         try: self.font_icon = pygame.font.SysFont("segoeuiemoji", 30)
         except: self.font_icon = pygame.font.Font(None, 30)
         self.show_ui = True
         
-        # UI Controls
-        self.slider_water = Slider(20, 60, 200, 20, -11000.0, 9000.0, 0.0, "Sea Level (m)")
-        self.slider_azimuth = Slider(20, 110, 200, 20, 0, 360, 315, "Light Dir")
-        self.slider_altitude = Slider(20, 160, 200, 20, 0, 90, 45, "Light Height")
-        self.slider_intensity = Slider(20, 210, 200, 20, 0.0, 2.0, 1.2, "Light Power")
-        self.btn_grid_minus = Button(140, 260, 30, 30, "-", self.font_ui, (100,100,100), (150,150,150), (255,255,255), self.dec_grid)
-        self.btn_grid_plus = Button(180, 260, 30, 30, "+", self.font_ui, (100,100,100), (150,150,150), (255,255,255), self.inc_grid)
-        self.btn_regen = Button(20, 310, 120, 40, "New Map", self.font_ui, (100, 100, 100), (150, 150, 150), (255,255,255), self.regenerate_seed)
+        # --- UI WIDGETS ---
+        self.slider_water = Slider(20, 50, 200, 20, -11000.0, 9000.0, 0.0, "Sea Level (m)")
+        self.slider_azimuth = Slider(20, 100, 200, 20, 0, 360, 315, "Light Dir")
+        self.slider_altitude = Slider(20, 150, 200, 20, 0, 90, 45, "Light Height")
+        self.slider_intensity = Slider(20, 200, 200, 20, 0.0, 2.0, 1.2, "Light Power")
         
+        self.btn_grid_minus = Button(140, 240, 30, 30, "-", self.font_ui, (100,100,100), (150,150,150), (255,255,255), self.dec_grid)
+        self.btn_grid_plus = Button(180, 240, 30, 30, "+", self.font_ui, (100,100,100), (150,150,150), (255,255,255), self.inc_grid)
+        self.btn_regen = Button(20, 290, 220, 35, "Regenerate World", self.font_ui, (100, 100, 100), (150, 150, 150), (255,255,255), self.regenerate_seed)
+        
+        # Tools
+        self.btn_new_road = Button(20, 340, 105, 35, "+ Road", self.font_ui, (139,69,19), (160,82,45), (255,255,255), lambda: self.start_new_vector("road"))
+        self.btn_new_river = Button(135, 340, 105, 35, "+ River", self.font_ui, (40,60,150), (60,80,180), (255,255,255), lambda: self.start_new_vector("river"))
+        
+        # Edit Context Buttons
+        self.btn_save_vec = Button(20, 340, 220, 35, "Save Line", self.font_ui, (50,150,50), (80,200,80), (255,255,255), self.save_active_vector)
+        self.btn_cancel_vec = Button(20, 385, 105, 30, "Cancel", self.font_ui, (150,50,50), (200,80,80), (255,255,255), self.cancel_vector)
+        self.btn_delete_vec = Button(135, 385, 105, 30, "Delete", self.font_ui, (100,0,0), (150,0,0), (255,255,255), self.delete_vector)
+
+        # Marker Context Buttons
+        self.btn_edit_marker = Button(20, SCREEN_HEIGHT - 110, 80, 30, "Edit", self.font_ui, (100,150,200), (150,200,250), (0,0,0), self._open_edit_modal)
+        self.btn_delete_marker = Button(110, SCREEN_HEIGHT - 110, 80, 30, "Delete", self.font_ui, (200,100,100), (250,150,150), (0,0,0), self._delete_selected_marker)
+        self.btn_center_marker = Button(200, SCREEN_HEIGHT - 110, 80, 30, "Center", self.font_ui, (150,150,150), (200,200,200), (0,0,0), self._center_on_selected_marker)
+
         self.db = DBManager()
 
     def inc_grid(self): self.grid_size = min(256, self.grid_size + 8)
     def dec_grid(self): self.grid_size = max(16, self.grid_size - 8)
 
+    # --- DEFINED HERE TO FIX ATTRIBUTE ERROR ---
     def _create_marker_buttons(self):
-        y = SCREEN_HEIGHT - 120
-        self.btn_edit_marker = Button(20, y, 80, 30, "Edit", self.font_ui, (100,150,200), (150,200,250), (0,0,0), self._open_edit_modal)
-        self.btn_delete_marker = Button(110, y, 80, 30, "Delete", self.font_ui, (200,100,100), (250,150,150), (0,0,0), self._delete_selected_marker)
-        self.btn_center_marker = Button(200, y, 80, 30, "Center", self.font_ui, (150,150,150), (200,200,200), (0,0,0), self._center_on_selected_marker)
+        # Re-initialize marker buttons if needed, currently they are created in __init__
+        # This method is called by input logic to ensure they exist/reset
+        self.btn_edit_marker = Button(20, SCREEN_HEIGHT - 110, 80, 30, "Edit", self.font_ui, (100,150,200), (150,200,250), (0,0,0), self._open_edit_modal)
+        self.btn_delete_marker = Button(110, SCREEN_HEIGHT - 110, 80, 30, "Delete", self.font_ui, (200,100,100), (250,150,150), (0,0,0), self._delete_selected_marker)
+        self.btn_center_marker = Button(200, SCREEN_HEIGHT - 110, 80, 30, "Center", self.font_ui, (150,150,150), (200,200,200), (0,0,0), self._center_on_selected_marker)
 
     def set_node(self, node_data):
         self.current_node = node_data
         metadata = node_data.get('metadata', {})
+        
+        # Load Settings
         if 'sea_level' in metadata: self.slider_water.value = metadata['sea_level']; self.slider_water.update_handle()
+        if 'light_azimuth' in metadata: self.slider_azimuth.value = metadata['light_azimuth']; self.slider_azimuth.update_handle()
+        if 'light_altitude' in metadata: self.slider_altitude.value = metadata['light_altitude']; self.slider_altitude.update_handle()
+        if 'grid_size' in metadata: self.grid_size = metadata['grid_size']
+        
+        self.vectors = self.db.get_vectors(self.current_node['id'])
+        self.active_vector = None
+
         if 'file_path' in metadata:
             self.render_strategy = ImageMapStrategy(metadata, self.theme)
             map_w, map_h = self.render_strategy.width, self.render_strategy.height
-            self.cam_x, self.cam_y = map_w / 2, map_h / 2
-            scale_x, scale_y = (SCREEN_WIDTH - 50) / map_w, (SCREEN_HEIGHT - 50) / map_h
-            self.zoom = min(scale_x, scale_y)
+            
+            if 'cam_x' in metadata:
+                self.cam_x = metadata['cam_x']
+                self.cam_y = metadata['cam_y']
+                self.zoom = metadata['zoom']
+            else:
+                self.cam_x, self.cam_y = map_w / 2, map_h / 2
+                scale_x, scale_y = (SCREEN_WIDTH - 50) / map_w, (SCREEN_HEIGHT - 50) / map_h
+                self.zoom = min(scale_x, scale_y)
+                
             self.markers = self.db.get_markers(self.current_node['id'])
         else: self.render_strategy = None
         self.selected_marker = None
+
+    def save_current_state(self):
+        """Persist UI settings to DB"""
+        if not self.current_node: return
+        meta = self.current_node.get('metadata', {})
+        meta['sea_level'] = self.slider_water.value
+        meta['light_azimuth'] = self.slider_azimuth.value
+        meta['light_altitude'] = self.slider_altitude.value
+        meta['cam_x'] = self.cam_x
+        meta['cam_y'] = self.cam_y
+        meta['zoom'] = self.zoom
+        meta['grid_size'] = self.grid_size
+        self.db.update_node_data(self.current_node['id'], metadata=meta)
+        #print("DEBUG: State Saved")
 
     def regenerate_seed(self):
         if not self.current_node: return
@@ -72,13 +135,72 @@ class MapViewer:
         self.db.update_node_data(nid, metadata=metadata)
         node = self.db.get_node_by_coords(cid, None, 0, 0)
         self.set_node(node)
+        return True
+    
+    # --- ACTIONS ---
+    def start_new_vector(self, vtype):
+        #print(f"DEBUG: Starting new {vtype}")
+        self.selected_marker = None
+        self.active_vector = {'points': [], 'type': vtype, 'width': 4 if vtype=='road' else 8, 'id': None}
+        self.selected_point_idx = None
+        return True 
+    
+    def save_active_vector(self):
+        #print("DEBUG: Saving Vector")
+        if self.active_vector and len(self.active_vector['points']) > 1:
+            self.db.save_vector(self.current_node['id'], self.active_vector['type'], self.active_vector['points'], self.active_vector['width'], self.active_vector.get('id'))
+            self.vectors = self.db.get_vectors(self.current_node['id'])
+        self.active_vector = None
+        return True
+    
+    def cancel_vector(self):
+        #print("DEBUG: Cancel Vector")
+        self.active_vector = None
+        self.selected_point_idx = None
+        return True
 
+    def delete_vector(self):
+        #print("DEBUG: Delete Vector")
+        if self.active_vector and self.active_vector.get('id'):
+            self.db.delete_vector(self.active_vector['id'])
+            self.vectors = self.db.get_vectors(self.current_node['id'])
+        self.active_vector = None
+        return True
+
+    def _open_edit_modal(self):
+        if self.selected_marker: self.active_modal = MarkerModal(SCREEN_WIDTH//2-150, SCREEN_HEIGHT//2-125, self._save_marker, self._close_modal, self.selected_marker)
+        return True
+
+    def _delete_selected_marker(self):
+        if self.selected_marker:
+            self.db.delete_marker(self.selected_marker['id'])
+            self.markers = self.db.get_markers(self.current_node['id'])
+            self.selected_marker = None
+        return True
+
+    def _center_on_selected_marker(self):
+        if self.selected_marker: self.cam_x, self.cam_y = self.selected_marker['world_x'], self.selected_marker['world_y']
+        return True
+
+    def _save_marker(self, marker_id, symbol, title, note):
+        if marker_id: 
+            m = self.selected_marker
+            self.db.update_marker(marker_id, m['world_x'], m['world_y'], symbol, title, note)
+        else: 
+            wx, wy = self.pending_click_pos
+            self.db.add_marker(self.current_node['id'], wx, wy, symbol, title, note)
+        self.markers = self.db.get_markers(self.current_node['id'])
+        self.active_modal, self.selected_marker = None, None
+
+    def _close_modal(self): self.active_modal = None
+
+    # --- INPUT ---
     def handle_input(self, event):
         if self.active_modal:
             self.active_modal.handle_event(event)
             return
 
-        # Handle UI events
+        # 1. UI Handling
         if self.show_ui:
             self.slider_water.handle_event(event)
             self.slider_azimuth.handle_event(event)
@@ -87,15 +209,25 @@ class MapViewer:
             self.btn_grid_plus.handle_event(event)
             self.btn_grid_minus.handle_event(event)
             if self.btn_regen.handle_event(event): return
+            
+            if not self.active_vector:
+                if self.btn_new_road.handle_event(event): return
+                if self.btn_new_river.handle_event(event): return
+            else:
+                if self.btn_save_vec.handle_event(event): return
+                if self.btn_cancel_vec.handle_event(event): return
+                if self.btn_delete_vec.handle_event(event): return
+
+            if self.selected_marker:
+                if self.btn_edit_marker.handle_event(event): return
+                if self.btn_delete_marker.handle_event(event): return
+                if self.btn_center_marker.handle_event(event): return
+
             if self.render_strategy:
                 self.render_strategy.set_light_direction(self.slider_azimuth.value, self.slider_altitude.value)
                 self.render_strategy.set_light_intensity(self.slider_intensity.value)
-        if self.selected_marker:
-            if self.btn_edit_marker: self.btn_edit_marker.handle_event(event)
-            if self.btn_delete_marker: self.btn_delete_marker.handle_event(event)
-            if self.btn_center_marker: self.btn_center_marker.handle_event(event)
 
-        # Keyboard camera
+        # 2. Camera
         keys = pygame.key.get_pressed()
         speed = 20 / self.zoom 
         if keys[pygame.K_LSHIFT]: speed *= 3
@@ -104,86 +236,140 @@ class MapViewer:
         if keys[pygame.K_UP]: self.cam_y -= speed
         if keys[pygame.K_DOWN]: self.cam_y += speed
         
-        # Keyboard toggles & hotkeys
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_LEFTBRACKET: self.zoom = max(0.01, self.zoom * 0.9)
             if event.key == pygame.K_RIGHTBRACKET: self.zoom = min(10.0, self.zoom * 1.1)
             if event.key == pygame.K_h: self.show_ui = not self.show_ui
             if event.key == pygame.K_g: self.show_grid = not self.show_grid
-            if event.key == pygame.K_t: self.grid_type = "SQUARE" if self.grid_type == "HEX" else "HEX"
-            if event.key == pygame.K_MINUS: self.dec_grid()
-            if event.key == pygame.K_EQUALS: self.inc_grid()
-            if event.key == pygame.K_s and self.current_node:
-                meta = self.current_node.get('metadata', {}); meta['sea_level'] = self.slider_water.value
-                self.db.update_node_data(self.current_node['id'], metadata=meta); print("Saved.")
+            if event.key == pygame.K_s: self.save_current_state()
+            if event.key == pygame.K_ESCAPE:
+                if self.active_vector: self.cancel_vector()
+                else: self.save_current_state()
 
-        # Mouse Dragging
-        if event.type == pygame.MOUSEMOTION and self.dragging_marker:
-            center_x, center_y = SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2
+        # Coords
+        center_x, center_y = SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2
+        
+        # 3. MOUSE MOTION
+        if event.type == pygame.MOUSEMOTION:
             world_x = ((event.pos[0] - center_x) / self.zoom) + self.cam_x
             world_y = ((event.pos[1] - center_y) / self.zoom) + self.cam_y
-            self.dragging_marker['world_x'] = world_x - self.drag_offset[0]
-            self.dragging_marker['world_y'] = world_y - self.drag_offset[1]
-            return
 
-        if event.type == pygame.MOUSEBUTTONUP and event.button == 1 and self.dragging_marker:
-            m = self.dragging_marker
-            self.db.update_marker(m['id'], m['world_x'], m['world_y'], m['symbol'], m['title'], m['description'])
-            self.dragging_marker = None
-            return
+            if self.active_vector and self.dragging_point and self.selected_point_idx is not None:
+                self.active_vector['points'][self.selected_point_idx] = (world_x, world_y)
+                return
 
-        # Mouse Click Logic
+            if self.dragging_marker:
+                self.dragging_marker['world_x'] = world_x - self.drag_offset[0]
+                self.dragging_marker['world_y'] = world_y - self.drag_offset[1]
+                return
+
+        # 4. MOUSE UP
+        if event.type == pygame.MOUSEBUTTONUP and event.button == 1:
+            if self.dragging_marker:
+                m = self.dragging_marker
+                self.db.update_marker(m['id'], m['world_x'], m['world_y'], m['symbol'], m['title'], m['description'])
+                #print(f"DEBUG: Marker {m['id']} updated at {m['world_x']}, {m['world_y']}")
+                self.dragging_marker = None
+            if self.dragging_point:
+                self.dragging_point = False
+
+        # 5. MOUSE DOWN (Pixel Check)
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            if self.show_ui and event.pos[0] < 260: return 
+
+            #print(f"DEBUG: Click at {event.pos}")
+            world_x = ((event.pos[0] - center_x) / self.zoom) + self.cam_x
+            world_y = ((event.pos[1] - center_y) / self.zoom) + self.cam_y
+
+            # A. Vector Edit Mode
+            if self.active_vector:
+                hit_point = False
+                for i, pt in enumerate(self.active_vector['points']):
+                    dist = math.hypot(pt[0]-world_x, pt[1]-world_y)
+                    if dist < 10/self.zoom:
+                        self.selected_point_idx = i
+                        self.dragging_point = True
+                        hit_point = True
+                        #print("DEBUG: Hit Control Point")
+                        break
+                
+                if not hit_point:
+                    self.active_vector['points'].append((world_x, world_y))
+                    self.selected_point_idx = len(self.active_vector['points']) - 1
+                    #print("DEBUG: Added Point")
+                return
+
+            # B. Check Markers
             if self.hovered_marker:
+                if pygame.key.get_mods() & pygame.KMOD_SHIFT:
+                    #print("DEBUG: Enter Marker Signal")
+                    return {"action": "enter_marker", "marker": self.hovered_marker}
                 self.selected_marker = self.hovered_marker
                 self._create_marker_buttons()
                 self.dragging_marker = self.selected_marker
-                center_x, center_y = SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2
-                world_x = ((event.pos[0] - center_x) / self.zoom) + self.cam_x
-                world_y = ((event.pos[1] - center_y) / self.zoom) + self.cam_y
                 self.drag_offset = (world_x - self.dragging_marker['world_x'], world_y - self.dragging_marker['world_y'])
+                #print(f"DEBUG: Selected Marker {self.selected_marker['title']}")
                 return
             
-            if self.show_ui and event.pos[0] < 260 and event.pos[1] < 400: return
-            if self.selected_marker and event.pos[0] < 300 and event.pos[1] > SCREEN_HEIGHT-160: return
+            if self.selected_marker and event.pos[0] < 300 and event.pos[1] > SCREEN_HEIGHT-160: 
+                return 
 
+            # C. Pixel Color Check (Road/River Selection)
+            try:
+                pixel = self.screen.get_at(event.pos)[:3]
+                #print(f"DEBUG: Pixel Color {pixel}")
+                
+                target_type = None
+                if pixel == COLOR_ROAD: target_type = "road"
+                elif pixel == COLOR_RIVER: target_type = "river"
+                
+                if target_type:
+                    #print(f"DEBUG: Hit {target_type} pixel")
+                    # Find closest vector of that type
+                    closest = None
+                    min_d = float('inf')
+                    for vec in self.vectors:
+                        if vec['type'] != target_type: continue
+                        # Find distance to ANY control point as proxy
+                        for pt in vec['points']:
+                            d = math.hypot(pt[0]-world_x, pt[1]-world_y)
+                            if d < min_d:
+                                min_d = d
+                                closest = vec
+                    
+                    # If reasonably close (avoid cross-map selection)
+                    if closest and min_d < 1000: 
+                        self.active_vector = closest
+                        self.selected_marker = None
+                        #print(f"DEBUG: Selected Vector ID {closest.get('id')}")
+                        return
+            except Exception as e:
+                print(f"DEBUG: Pixel Check Fail: {e}")
+
+            # D. Default
             self.selected_marker = None
-            center_x, center_y = SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2
-            world_x = ((event.pos[0] - center_x) / self.zoom) + self.cam_x
-            world_y = ((event.pos[1] - center_y) / self.zoom) + self.cam_y
-            
             if pygame.key.get_mods() & pygame.KMOD_SHIFT:
+                #print("DEBUG: New Marker Modal")
                 self.pending_click_pos = (world_x, world_y)
                 self.active_modal = MarkerModal(SCREEN_WIDTH//2-150, SCREEN_HEIGHT//2-125, self._save_marker, self._close_modal)
             else:
+                #print("DEBUG: Zooming")
                 self.cam_x, self.cam_y = world_x, world_y
-                self.zoom = min(10.0, self.zoom * 2.5)
-
-    def _save_marker(self, marker_id, symbol, title, note):
-        if marker_id: # Update
-            m = self.selected_marker
-            self.db.update_marker(marker_id, m['world_x'], m['world_y'], symbol, title, note)
-        else: # Create
-            wx, wy = self.pending_click_pos
-            self.db.add_marker(self.current_node['id'], wx, wy, symbol, title, note)
-        self.markers = self.db.get_markers(self.current_node['id'])
-        self.active_modal, self.selected_marker = None, None
-
-    def _close_modal(self): self.active_modal = None
-    def _open_edit_modal(self):
-        if self.selected_marker: self.active_modal = MarkerModal(SCREEN_WIDTH//2-150, SCREEN_HEIGHT//2-125, self._save_marker, self._close_modal, self.selected_marker)
-    def _delete_selected_marker(self):
-        if self.selected_marker:
-            self.db.delete_marker(self.selected_marker['id'])
-            self.markers = self.db.get_markers(self.current_node['id'])
-            self.selected_marker = None
-    def _center_on_selected_marker(self):
-        if self.selected_marker: self.cam_x, self.cam_y = self.selected_marker['world_x'], self.selected_marker['world_y']
+                self.zoom = min(10.0, self.zoom * 2.0)
 
     def draw(self):
         self.screen.fill((10, 10, 15)) 
+        
         if self.render_strategy:
-            self.render_strategy.draw(self.screen, self.cam_x, self.cam_y, self.zoom, SCREEN_WIDTH, SCREEN_HEIGHT, sea_level_meters=self.slider_water.value)
+            self.render_strategy.draw(
+                self.screen, self.cam_x, self.cam_y, self.zoom, 
+                SCREEN_WIDTH, SCREEN_HEIGHT, 
+                sea_level_meters=self.slider_water.value, 
+                vectors=self.vectors,
+                active_vector=self.active_vector,
+                selected_point_idx=self.selected_point_idx
+            )
+            
         if self.show_grid and self.render_strategy:
             center_x, center_y = SCREEN_WIDTH//2, SCREEN_HEIGHT//2
             map_sx, map_sy = center_x-(self.cam_x*self.zoom), center_y-(self.cam_y*self.zoom)
@@ -246,7 +432,7 @@ class MapViewer:
                 self.screen.blit(t_main, rect)
                 if rect.collidepoint(mouse_pos) and not self.active_modal and not self.dragging_marker: self.hovered_marker = m
         if self.hovered_marker:
-            txt = f"{self.hovered_marker['symbol']} {self.hovered_marker['title']}"
+            txt = f"{self.hovered_marker['symbol']} {self.hovered_marker['title']} (Shift+Click to Enter)"
             surf = self.font_ui.render(txt, True, (255,255,255))
             bg = pygame.Rect(mouse_pos[0]+15, mouse_pos[1]+15, surf.get_width()+10, surf.get_height()+10)
             pygame.draw.rect(self.screen, (0,0,0), bg); pygame.draw.rect(self.screen, (255,255,255), bg, 1)
@@ -261,16 +447,46 @@ class MapViewer:
         self.screen.blit(ts, (bg.x+10, bg.y+5))
 
     def _draw_ui(self):
-        pygame.draw.rect(self.screen, (30,30,40), (0,0,260, SCREEN_HEIGHT)); pygame.draw.rect(self.screen, (100,100,100), (0,0,260, SCREEN_HEIGHT),2)
-        if self.current_node: self.screen.blit(self.font_title.render("World Controls", True, (255,255,255)), (20,15))
-        self.slider_water.draw(self.screen); self.slider_azimuth.draw(self.screen); self.slider_altitude.draw(self.screen); self.slider_intensity.draw(self.screen)
-        self.screen.blit(self.font_ui.render(f"Grid Size: {self.grid_size}", True, (200,200,200)), (20,265))
-        self.btn_grid_minus.draw(self.screen); self.btn_grid_plus.draw(self.screen)
+        # Sidebar Background - Drawn Last (On Top)
+        pygame.draw.rect(self.screen, (30,30,40), (0,0,260, SCREEN_HEIGHT))
+        pygame.draw.rect(self.screen, (100,100,100), (0,0,260, SCREEN_HEIGHT), 2)
+        
+        if self.current_node: 
+            self.screen.blit(self.font_title.render("World Controls", True, (255,255,255)), (20,15))
+        
+        self.slider_water.draw(self.screen)
+        self.slider_azimuth.draw(self.screen)
+        self.slider_altitude.draw(self.screen)
+        self.slider_intensity.draw(self.screen)
+        
+        self.screen.blit(self.font_ui.render(f"Grid Size: {self.grid_size}", True, (200,200,200)), (20,245))
+        self.btn_grid_minus.draw(self.screen)
+        self.btn_grid_plus.draw(self.screen)
         self.btn_regen.draw(self.screen)
+        
+        if self.active_vector:
+            self.btn_save_vec.draw(self.screen)
+            self.btn_cancel_vec.draw(self.screen)
+            if self.active_vector.get('id'):
+                self.btn_delete_vec.draw(self.screen)
+            
+            lbl = self.font_ui.render(f"EDITING: {self.active_vector['type'].upper()}", True, (255,200,100))
+            self.screen.blit(lbl, (20, 320))
+            
+            hint = self.font_ui.render("Left-Click Map to add points", True, (150,150,150))
+            self.screen.blit(hint, (20, 420))
+            hint2 = self.font_ui.render("Drag points to reshape", True, (150,150,150))
+            self.screen.blit(hint2, (20, 440))
+        else:
+            self.btn_new_road.draw(self.screen)
+            self.btn_new_river.draw(self.screen)
+
         if self.selected_marker and not self.dragging_marker:
             panel_y = SCREEN_HEIGHT-160
             pygame.draw.rect(self.screen, (40,40,50), (10,panel_y,240,150), border_radius=5)
             pygame.draw.rect(self.screen, (150,150,150), (10,panel_y,240,150),1,border_radius=5)
             self.screen.blit(self.font_title.render(self.selected_marker['title'], True, (255,255,100)), (20, panel_y+10))
             self.screen.blit(self.font_ui.render(self.selected_marker['description'], True, (200,200,200)), (20,panel_y+45))
-            self.btn_edit_marker.draw(self.screen); self.btn_delete_marker.draw(self.screen); self.btn_center_marker.draw(self.screen)
+            self.btn_edit_marker.draw(self.screen)
+            self.btn_delete_marker.draw(self.screen)
+            self.btn_center_marker.draw(self.screen)

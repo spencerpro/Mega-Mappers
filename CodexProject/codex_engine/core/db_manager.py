@@ -14,18 +14,16 @@ class DBManager:
 
     def get_connection(self):
         conn = sqlite3.connect(self.db_path)
-        conn.row_factory = sqlite3.Row  # Access columns by name
+        conn.row_factory = sqlite3.Row
         return conn
 
     def _initialize_tables(self):
-        """Creates the schema if it doesn't exist."""
         queries = [
             """CREATE TABLE IF NOT EXISTS campaigns (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT NOT NULL,
                 theme_id TEXT NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                game_time_minutes INTEGER DEFAULT 0
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );""",
             
             """CREATE TABLE IF NOT EXISTS nodes (
@@ -38,22 +36,10 @@ class DBManager:
                 grid_y INTEGER,
                 geometry_data TEXT, 
                 metadata TEXT,
-                is_visited BOOLEAN DEFAULT 0,
                 FOREIGN KEY(campaign_id) REFERENCES campaigns(id),
                 FOREIGN KEY(parent_node_id) REFERENCES nodes(id)
             );""",
 
-            """CREATE TABLE IF NOT EXISTS entities (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                node_id INTEGER,
-                name TEXT,
-                type TEXT,
-                stats_block TEXT,
-                lore_description TEXT,
-                FOREIGN KEY(node_id) REFERENCES nodes(id)
-            );""",
-            
-            # --- NEW TABLE FOR MARKERS ---
             """CREATE TABLE IF NOT EXISTS markers (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 node_id INTEGER,
@@ -62,6 +48,15 @@ class DBManager:
                 symbol TEXT,
                 title TEXT,
                 description TEXT,
+                FOREIGN KEY(node_id) REFERENCES nodes(id)
+            );""",
+
+            """CREATE TABLE IF NOT EXISTS vectors (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                node_id INTEGER,
+                type TEXT, 
+                points_json TEXT,
+                width INTEGER,
                 FOREIGN KEY(node_id) REFERENCES nodes(id)
             );"""
         ]
@@ -74,7 +69,7 @@ class DBManager:
         except Exception as e:
             logger.error(f"Database initialization failed: {e}")
 
-    # --- CAMPAIGN METHODS ---
+    # --- CAMPAIGN ---
     def create_campaign(self, name: str, theme_id: str) -> int:
         with self.get_connection() as conn:
             cursor = conn.execute("INSERT INTO campaigns (name, theme_id) VALUES (?, ?)", (name, theme_id))
@@ -91,7 +86,7 @@ class DBManager:
             rows = conn.execute("SELECT * FROM campaigns ORDER BY created_at DESC").fetchall()
             return [dict(row) for row in rows]
 
-    # --- NODE METHODS ---
+    # --- NODE ---
     def create_node(self, campaign_id: int, node_type: str, parent_id: Optional[int], x: int, y: int, name: str = "Unknown") -> int:
         with self.get_connection() as conn:
             cursor = conn.execute(
@@ -127,7 +122,7 @@ class DBManager:
         sql = f"UPDATE nodes SET {', '.join(updates)} WHERE id = ?"
         with self.get_connection() as conn: conn.execute(sql, tuple(params)); conn.commit()
 
-    # --- NEW MARKER METHODS ---
+    # --- MARKERS ---
     def add_marker(self, node_id, wx, wy, symbol, title, desc=""):
         with self.get_connection() as conn:
             conn.execute(
@@ -137,7 +132,6 @@ class DBManager:
             conn.commit()
     
     def update_marker(self, marker_id, wx, wy, symbol, title, desc):
-        """Saves changes to an existing marker."""
         with self.get_connection() as conn:
             conn.execute(
                 "UPDATE markers SET world_x=?, world_y=?, symbol=?, title=?, description=? WHERE id=?",
@@ -153,4 +147,32 @@ class DBManager:
     def delete_marker(self, marker_id):
         with self.get_connection() as conn:
             conn.execute("DELETE FROM markers WHERE id = ?", (marker_id,))
+            conn.commit()
+
+    # --- VECTORS (Roads/Rivers) ---
+    def save_vector(self, node_id, vtype, points, width=5, vector_id=None):
+        """Create or Update a vector line."""
+        p_json = json.dumps(points)
+        with self.get_connection() as conn:
+            if vector_id:
+                conn.execute("UPDATE vectors SET points_json=?, width=?, type=? WHERE id=?", 
+                             (p_json, width, vtype, vector_id))
+            else:
+                conn.execute("INSERT INTO vectors (node_id, type, points_json, width) VALUES (?,?,?,?)",
+                             (node_id, vtype, p_json, width))
+            conn.commit()
+    
+    def get_vectors(self, node_id):
+        with self.get_connection() as conn:
+            rows = conn.execute("SELECT * FROM vectors WHERE node_id=?", (node_id,)).fetchall()
+            results = []
+            for r in rows:
+                d = dict(r)
+                d['points'] = json.loads(d['points_json'])
+                results.append(d)
+            return results
+
+    def delete_vector(self, vector_id):
+        with self.get_connection() as conn:
+            conn.execute("DELETE FROM vectors WHERE id=?", (vector_id,))
             conn.commit()
