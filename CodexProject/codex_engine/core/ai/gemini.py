@@ -9,7 +9,8 @@ class GeminiProvider(AIProvider):
         self.model = None
         if self.api_key:
             genai.configure(api_key=self.api_key)
-            self.model_name = "gemini-1.5-flash" 
+            # EXPLICITLY USING THE REQUESTED MODEL
+            self.model_name = "gemini-flash-latest" 
 
     def is_available(self) -> bool:
         return self.api_key is not None
@@ -39,6 +40,7 @@ class GeminiProvider(AIProvider):
         
         try:
             response = self._get_model().generate_content(full_prompt)
+            # Clean up potential markdown code blocks if the model ignores instruction
             clean_text = response.text.replace("```json", "").replace("```", "").strip()
             return json.loads(clean_text)
         except Exception as e:

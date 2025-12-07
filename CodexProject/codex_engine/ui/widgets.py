@@ -60,11 +60,8 @@ class Slider:
         self.handle_w = 15
         self.update_handle()
     def update_handle(self):
-        # Prevent division by zero if min==max
-        if (self.max_val - self.min_val) == 0:
-            ratio = 0
-        else:
-            ratio = (self.value - self.min_val) / (self.max_val - self.min_val)
+        if (self.max_val - self.min_val) == 0: ratio = 0
+        else: ratio = (self.value - self.min_val) / (self.max_val - self.min_val)
         handle_x = self.rect.x + (self.rect.width * ratio) - (self.handle_w / 2)
         self.handle_rect = pygame.Rect(handle_x, self.rect.y - 5, self.handle_w, self.rect.height + 10)
     def handle_event(self, event):
@@ -87,32 +84,153 @@ class Slider:
         pygame.draw.rect(surface, color, self.handle_rect, border_radius=3)
 
 class MarkerModal:
+    def __init__(self, x, y, on_save, on_cancel, marker_data=None, map_context="world_map", on_generate=None):
+        self.is_editing = marker_data is not None
+        self.marker_id = marker_data['id'] if self.is_editing else None
+        
+        self.rect = pygame.Rect(x, y, 320, 320) # Slightly wider/taller
+        self.on_save = on_save
+        self.on_cancel = on_cancel
+        self.on_generate = on_generate # Callback for AI
+        self.font = pygame.font.Font(None, 24)
+        
+        title = marker_data['title'] if self.is_editing else ""
+        note = marker_data['description'] if self.is_editing else ""
+        
+        self.input_title = InputBox(x+20, y+50, 280, 32, self.font, text=title)
+        self.input_note = InputBox(x+20, y+100, 280, 32, self.font, text=note)
+        
+        # --- DYNAMIC TYPES BASED ON CONTEXT ---
+        if map_context == "world_map":
+            self.types = [
+                {"label": "Village", "icon": "house"},
+                {"label": "Dungeon", "icon": "skull"},
+                {"label": "Note", "icon": "star"}
+            ]
+        else: # local_map or others
+            self.types = [
+                {"label": "Building", "icon": "house"},
+                {"label": "Dungeon Ent.", "icon": "skull"},
+                {"label": "Portal", "icon": "star"} # Placeholder for stairs/exits
+            ]
+        
+        # Default or Existing Selection
+        self.selected_type_idx = 0
+        if self.is_editing:
+            for i, t in enumerate(self.types):
+                if t['icon'] == marker_data.get('symbol', 'star'):
+                    self.selected_type_idx = i
+                    break
+        
+        # Buttons
+        self.btn_save = Button(x+20, y+270, 80, 30, "Save", self.font, (100,200,100), (150,250,150), (0,0,0), self.trigger_save)
+        self.btn_cancel = Button(x+110, y+270, 80, 30, "Cancel", self.font, (200,100,100), (250,150,150), (0,0,0), on_cancel)
+        
+        # AI Button (Only if on_generate callback provided)
+        self.btn_gen = None
+        if self.on_generate:
+            self.btn_gen = Button(x+200, y+270, 100, 30, "AI Gen", self.font, (100,100,200), (150,150,250), (255,255,255), self.trigger_gen)
+
+    def trigger_save(self):
+        if self.input_title.text:
+            selected = self.types[self.selected_type_idx]
+            self.on_save(self.marker_id, selected['icon'], self.input_title.text, self.input_note.text)
+
+    def trigger_gen(self):
+        if self.on_generate:
+            # Pass current title/type to the AI handler
+            selected = self.types[self.selected_type_idx]
+            new_desc = self.on_generate(selected['label'], self.input_title.text)
+            if new_desc:
+                self.input_note.text = new_desc
+                self.input_note.txt_surface = self.input_note.font.render(new_desc, True, self.input_note.color)
+
+    def handle_event(self, event):
+        self.input_title.handle_event(event)
+        self.input_note.handle_event(event)
+        self.btn_save.handle_event(event)
+        self.btn_cancel.handle_event(event)
+        if self.btn_gen: self.btn_gen.handle_event(event)
+        
+        if event.type == pygame.MOUSEBUTTONDOWN:
+            # Type Selection Logic
+            sx, sy = self.rect.x + 20, self.rect.y + 160
+            for i, t in enumerate(self.types):
+                r = pygame.Rect(sx, sy, 80, 50) # Taller for hit area
+                if r.collidepoint(event.pos):
+                    self.selected_type_idx = i
+                sx += 90
+
+    def draw(self, surface):
+        pygame.draw.rect(surface, (50, 50, 60), self.rect, border_radius=10)
+        pygame.draw.rect(surface, (200, 200, 200), self.rect, 2, border_radius=10)
+        
+        lbl = self.font.render("Marker Details", True, (255,255,255))
+        surface.blit(lbl, (self.rect.x+20, self.rect.y+10))
+        
+        lbl_t = self.font.render("Title:", True, (200,200,200))
+        surface.blit(lbl_t, (self.rect.x+20, self.rect.y+35))
+        self.input_title.draw(surface)
+        
+        lbl_n = self.font.render("Description:", True, (200,200,200))
+        surface.blit(lbl_n, (self.rect.x+20, self.rect.y+85))
+        self.input_note.draw(surface)
+        
+        # Type Buttons
+        sx, sy = self.rect.x + 20, self.rect.y + 160
+        for i, t in enumerate(self.types):
+            color = (100, 100, 150) if i == self.selected_type_idx else (70, 70, 80)
+            pygame.draw.rect(surface, color, (sx, sy, 80, 40), border_radius=5)
+            pygame.draw.rect(surface, (0,0,0), (sx, sy, 80, 40), 1, border_radius=5)
+            
+            # Label only (Icons are drawn as shapes in map_viewer, text here for clarity)
+            lab = pygame.font.Font(None, 20).render(t['label'], True, (200,200,200))
+            surface.blit(lab, (sx+5, sy+12))
+            
+            sx += 90
+            
+        self.btn_save.draw(surface)
+        self.btn_cancel.draw(surface)
+        if self.btn_gen: self.btn_gen.draw(surface)
+
+class MarkerModal_old:
     def __init__(self, x, y, on_save, on_cancel, marker_data=None):
         self.is_editing = marker_data is not None
         self.marker_id = marker_data['id'] if self.is_editing else None
         
-        self.rect = pygame.Rect(x, y, 300, 250)
+        self.rect = pygame.Rect(x, y, 300, 300) # Made taller for options
         self.on_save = on_save
         self.on_cancel = on_cancel
         self.font = pygame.font.Font(None, 24)
         
-        # Pre-fill fields if editing
         title = marker_data['title'] if self.is_editing else ""
         note = marker_data['description'] if self.is_editing else ""
         
         self.input_title = InputBox(x+20, y+50, 260, 32, self.font, text=title)
         self.input_note = InputBox(x+20, y+100, 260, 32, self.font, text=note)
         
-        self.symbols = ["🏰", "⚔️", "🌲", "💀", "🏘️", "⛏️"]
-        self.selected_symbol = marker_data['symbol'] if self.is_editing else "🏰"
+        # --- NEW: TYPE SELECTION ---
+        self.types = [
+            {"label": "Village", "icon": "🏰"},
+            {"label": "Dungeon", "icon": "💀"},
+            {"label": "Note", "icon": "📜"}
+        ]
         
-        save_text = "Update" if self.is_editing else "Save"
-        self.btn_save = Button(x+20, y+200, 100, 30, save_text, self.font, (100,200,100), (150,250,150), (0,0,0), self.trigger_save)
-        self.btn_cancel = Button(x+180, y+200, 100, 30, "Cancel", self.font, (200,100,100), (250,150,150), (0,0,0), on_cancel)
+        # Default or Existing Selection
+        self.selected_type_idx = 0
+        if self.is_editing:
+            for i, t in enumerate(self.types):
+                if t['icon'] == marker_data['symbol']:
+                    self.selected_type_idx = i
+                    break
+        
+        self.btn_save = Button(x+20, y+250, 100, 30, "Save", self.font, (100,200,100), (150,250,150), (0,0,0), self.trigger_save)
+        self.btn_cancel = Button(x+180, y+250, 100, 30, "Cancel", self.font, (200,100,100), (250,150,150), (0,0,0), on_cancel)
 
     def trigger_save(self):
         if self.input_title.text:
-            self.on_save(self.marker_id, self.selected_symbol, self.input_title.text, self.input_note.text)
+            selected = self.types[self.selected_type_idx]
+            self.on_save(self.marker_id, selected['icon'], self.input_title.text, self.input_note.text)
 
     def handle_event(self, event):
         self.input_title.handle_event(event)
@@ -121,19 +239,19 @@ class MarkerModal:
         self.btn_cancel.handle_event(event)
         
         if event.type == pygame.MOUSEBUTTONDOWN:
-            # Symbol Selection
-            sx, sy = self.rect.x + 20, self.rect.y + 150
-            for sym in self.symbols:
-                r = pygame.Rect(sx, sy, 30, 30)
+            # Type Selection Logic
+            sx, sy = self.rect.x + 20, self.rect.y + 160
+            for i, t in enumerate(self.types):
+                r = pygame.Rect(sx, sy, 80, 40)
                 if r.collidepoint(event.pos):
-                    self.selected_symbol = sym
-                sx += 40
+                    self.selected_type_idx = i
+                sx += 90
 
     def draw(self, surface):
         pygame.draw.rect(surface, (50, 50, 60), self.rect, border_radius=10)
         pygame.draw.rect(surface, (200, 200, 200), self.rect, 2, border_radius=10)
         
-        lbl = self.font.render("Add Map Note", True, (255,255,255))
+        lbl = self.font.render("Marker Details", True, (255,255,255))
         surface.blit(lbl, (self.rect.x+20, self.rect.y+10))
         
         lbl_t = self.font.render("Title:", True, (200,200,200))
@@ -144,15 +262,25 @@ class MarkerModal:
         surface.blit(lbl_n, (self.rect.x+20, self.rect.y+85))
         self.input_note.draw(surface)
         
-        sx, sy = self.rect.x + 20, self.rect.y + 150
-        for sym in self.symbols:
-            color = (100, 100, 150) if sym == self.selected_symbol else (70, 70, 80)
-            pygame.draw.rect(surface, color, (sx, sy, 30, 30), border_radius=5)
-            # You might need a font that supports emojis, default pygame font often doesn't. 
-            # If squares appear, change font.
-            txt = self.font.render(sym, True, (255,255,255))
-            surface.blit(txt, (sx+5, sy+5))
-            sx += 40
+        # Type Buttons
+        sx, sy = self.rect.x + 20, self.rect.y + 160
+        for i, t in enumerate(self.types):
+            color = (100, 100, 150) if i == self.selected_type_idx else (70, 70, 80)
+            pygame.draw.rect(surface, color, (sx, sy, 80, 40), border_radius=5)
+            pygame.draw.rect(surface, (0,0,0), (sx, sy, 80, 40), 1, border_radius=5)
+            
+            # Icon + Label
+            try:
+                # Some fonts fail emoji, simple fallback
+                ic = self.font.render(t['icon'], True, (255,255,255))
+                surface.blit(ic, (sx+30, sy+5))
+            except:
+                pass
+                
+            lab = pygame.font.Font(None, 18).render(t['label'], True, (200,200,200))
+            surface.blit(lab, (sx+5, sy+25))
+            
+            sx += 90
             
         self.btn_save.draw(surface)
         self.btn_cancel.draw(surface)

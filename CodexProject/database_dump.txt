@@ -1,0 +1,90 @@
+PRAGMA foreign_keys=OFF;
+BEGIN TRANSACTION;
+CREATE TABLE campaigns (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                theme_id TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+INSERT INTO campaigns VALUES(1,'test','fantasy','2025-12-06 18:31:02');
+CREATE TABLE nodes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                campaign_id INTEGER,
+                parent_node_id INTEGER,
+                type TEXT NOT NULL, 
+                name TEXT,
+                grid_x INTEGER,
+                grid_y INTEGER,
+                geometry_data TEXT, 
+                metadata TEXT,
+                FOREIGN KEY(campaign_id) REFERENCES campaigns(id),
+                FOREIGN KEY(parent_node_id) REFERENCES nodes(id)
+            );
+INSERT INTO nodes VALUES(1,1,NULL,'world_map','Fractal World',0,0,'{}','{"file_path": "0fe9c6e7-0d61-44db-a0db-730bd6d88ff0.png", "width": 2049, "height": 1025, "real_min": -11000.0, "real_max": 9000.0, "sea_level": 4000.0, "light_azimuth": 315, "light_altitude": 45, "contour_interval": 500.0, "cam_x": 1139.8511111111104, "cam_y": 463.9311111111111, "zoom": 2.6354319180087846, "grid_size": 64}');
+INSERT INTO nodes VALUES(2,1,1,'local_map','test (Local)',1083,449,'{}','{"file_path": "local_2aa9ae2c-23f7-4972-b155-87f5422137dd.png", "width": 1024, "height": 1024, "real_min": -440.0, "real_max": 5062.5185546875, "sea_level": 0.0, "light_azimuth": 315, "light_altitude": 45, "contour_interval": 12.5, "cam_x": 512.0, "cam_y": 512.0, "zoom": 0.771484375, "grid_size": 64, "overview": "The village of Local, known simply as ''test'' to outsiders, is a fiercely insular agricultural settlement nestled in the shadow of the imposing Whisperwood. Founded generations ago by devotees of the Dawn faith, the village usually thrives on quiet routine, but a creeping rot has taken hold. The fields are heavy with an unnerving silence, and a recent spate of ritualistic animal disappearances, coupled with the increasingly erratic and cold demeanor of the village priest, has replaced their stoicism with sharp, desperate paranoia, hinting at a corruption reaching far beneath the soil.", "npcs": [{"name": "Father Elara", "role": "Priest of the Dawn", "personality": "Anxious, zealous, and intensely sleep-deprived; he interprets all misfortune as a sign of divine abandonment.", "hook": "He needs someone discrete to investigate the source of the persistent metallic taste in the well water, believing it is a physical manifestation of a growing spiritual corruption.", "location": "Chapel of the Dawn"}, {"name": "Ma Margaret", "role": "Farm Matriarch", "personality": "Tough, skeptical, and fiercely protective; she trusts steel more than prayer.", "hook": "Her favorite working dog vanished without a sound last night, and she offers a significant bounty (10 gold) for the recovery of the dog or the head of whatever killed it, insisting the tracks lead towards the Secret Dungeon area.", "location": "Margaret Family Farm"}, {"name": "Roric ''Red''", "role": "Stable Hand/Gossip", "personality": "Gossipy, slightly cowardly, but observant, always eager to trade information for coin or a drink.", "hook": "He claims he saw a cloaked figure leaving the Village Well area carrying a heavy sack late one night, and he can be convinced to point out the Secret Dungeon''s hidden location if promised anonymity.", "location": "Tom''s Stables"}, {"name": "Vess", "role": "Traveling Apothecary", "personality": "Smooth-talking and unnervingly knowledgeable about ancient history; he constantly wears heavy leather gloves.", "hook": "He is selling ''purification salts'' guaranteed to cure the metallic taste in the water, but if pressed, he admits the salts are mined from deep subterranean fungi and might cause vivid, disturbing dreams.", "location": "Market Square"}], "rumors": ["Father Urien hasn''t slept in weeks, and some villagers claim they hear him whispering in a language that makes the shadows twist when he thinks he''s alone in the Chapel.", "The Village Well water has a curse on it; livestock that drink it become restless and bite the hands that feed them before running off into the Whisperwood.", "The traveling merchant, Silas, pays extremely high prices for raw iron and ''odd-looking stones''\u2014far more than they are worth for legitimate trade goods.", "The scars on the great oak tree aren''t from lightning; they are symbols burned into the wood by the original pilgrims to seal something dreadful beneath the roots.", "Matriarch Margaret lost her best ram last week, but the tracks leading away weren''t those of a wolf\u2014they were too perfectly round and small, like a child wearing heavy boots.", "Anyone who goes near the Chapel after midnight feels the cold so intensely that their blood starts to feel thick and slow, a sure sign the Dawn God has abandoned the place."]}');
+INSERT INTO nodes VALUES(3,1,2,'dungeon','Secret Dungeon',287,419,'{}','{"grid_size": 32, "sea_level": -9999, "light_azimuth": 315, "light_altitude": 45, "contour_interval": 12.5, "cam_x": 0, "cam_y": 0, "zoom": 1.0}');
+INSERT INTO nodes VALUES(4,1,2,'building','Chapel of the Dawn',72,528,'{}','{"grid_size": 32, "sea_level": -9999, "light_azimuth": 315, "light_altitude": 45, "contour_interval": 12.5, "cam_x": 0, "cam_y": 0, "zoom": 1.0}');
+INSERT INTO nodes VALUES(5,1,2,'building','Village Well',410,487,'{}','{"grid_size": 32, "sea_level": -9999, "light_azimuth": 315, "light_altitude": 45, "contour_interval": 12.5, "cam_x": -96.0, "cam_y": -46.0, "zoom": 2.0}');
+CREATE TABLE markers (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                node_id INTEGER,
+                world_x REAL,
+                world_y REAL,
+                symbol TEXT,
+                title TEXT,
+                description TEXT,
+                metadata TEXT,
+                FOREIGN KEY(node_id) REFERENCES nodes(id)
+            );
+INSERT INTO markers VALUES(1,1,1083.313888888888187,449.5122222222221921,'🏰','test','This is a test','{}');
+INSERT INTO markers VALUES(2,2,634.4951146193999421,511.4860115709916499,'⛪','Chapel of the Dawn','A once-proud stone structure, its stained-glass windows now filmed with grime, radiating a pervasive and unnatural coldness despite the blazing symbols of the sun etched into the lintels.','{}');
+INSERT INTO markers VALUES(3,2,397.4449001966921174,581.896992210449298,'🪙','Market Square','A dusty, central clearing marked by a permanently tilted wooden scale, currently dominated by the solitary, overly eager stall of a traveling merchant who observes everyone with unnerving intensity.','{}');
+INSERT INTO markers VALUES(4,2,410.9916903550690109,487.7119326898014719,'🪣','Village Well','The deep community well, whose iron bucket line frequently snags, drawing up water that remains unnaturally cold and carries a faint, persistent tang of copper and old blood.','{}');
+INSERT INTO markers VALUES(5,2,72.25323645481205404,528.9955915389223264,'✝️','Chapel of the Dawn','A once-proud stone structure, its stained-glass windows now filmed with grime, radiating a pervasive and unnatural coldness despite the blazing symbols of the sun etched into the lintels.','{}');
+INSERT INTO markers VALUES(6,2,910.5937305974531454,430.7465502769568388,'🐴','Tom''s Stables','A perpetually muddy yard surrounding a creaking stable house where the smell of feed and damp straw mingles with the sharp odor of unwashed human flesh and the continuous murmuring of unreliable gossip.','{}');
+INSERT INTO markers VALUES(7,2,224.0888601790450707,206.2716988908192662,'🌾','Margaret Family Farm','Sprawling fields of ripening grain surround this prosperous, fiercely defended farmstead, ruled by the demanding Matriarch Margaret whose sharp voice carries easily across the acreage.','{}');
+INSERT INTO markers VALUES(8,2,287.7569620253164544,419.9696202531645782,'skull','Secret Dungeon','The subtle, moss-covered entrance to an ancient subterranean complex, perfectly disguised beneath the root system of a massive, inexplicably scarred oak tree that never seems to sprout leaves.','{}');
+CREATE TABLE vectors (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                node_id INTEGER,
+                type TEXT, 
+                points_json TEXT,
+                width INTEGER,
+                FOREIGN KEY(node_id) REFERENCES nodes(id)
+            );
+INSERT INTO vectors VALUES(1,1,'river','[[1085.2111111111103, 566.7605555555556], [1083.3138888888882, 543.9938888888888], [1079.5194444444437, 518.5711111111111], [1081.7961111111103, 503.7727777777777], [1079.5194444444437, 492.3894444444444], [1083.3138888888882, 481.3855555555555], [1082.9344444444437, 468.10499999999996], [1082.9344444444437, 448.37388888888887], [1087.4877777777772, 425.22777777777776], [1088.6261111111105, 418.3977777777777]]',8);
+INSERT INTO vectors VALUES(2,1,'road','[[984.2788888888882, 482.1444444444444], [1018.0494444444437, 449.5122222222222], [1074.586666666666, 450.6505555555555], [1094.317777777777, 443.0616666666666], [1127.7088888888882, 429.40166666666664], [1160.720555555555, 402.46111111111105], [1196.7677777777772, 394.49277777777775], [1229.3999999999994, 401.7022222222222], [1261.6527777777771, 415.36222222222216], [1286.316666666666, 439.64666666666665], [1307.1861111111104, 463.5516666666666]]',4);
+INSERT INTO vectors VALUES(3,2,'river','[[587.4725925925653, 4531.560296296298], [522.7140740740501, 3754.4580740740716], [393.19703703701185, 2886.693925925926], [470.90725925923323, 2381.5774814814795], [393.19703703701185, 1993.0263703703686], [522.7140740740501, 1617.426962962962], [509.76237037034394, 1164.117333333332], [509.76237037034394, 490.6287407407401], [665.1828148147945, -299.4251851851858], [704.0379259259051, -532.5558518518538]]',136);
+INSERT INTO vectors VALUES(4,2,'road','[[-2857.6805925926155, 1643.3303703703684], [-1704.978962962989, 529.4838518518508], [224.82488888886292, 568.3389629629615], [898.3134814814587, 309.304888888887], [2038.0634074073828, -156.95644444444528], [3164.8616296296086, -1076.5274074074093], [4395.27348148146, -1348.5131851851863], [5509.11999999998, -1102.430814814816], [6610.014814814793, -636.1694814814837], [7451.87555555553, 192.7395555555549], [8164.219259259236, 1008.6968888888873]]',40);
+INSERT INTO vectors VALUES(5,2,'road','[[229.4278481012658, 548.2936708860759], [197.0227848101266, 426.4506329113924], [234.6126582278481, 346.0860759493671], [184.0607594936709, 257.94430379746836], [184.0607594936709, 154.2481012658228]]',4);
+INSERT INTO vectors VALUES(6,2,'road','[[872.3443037974683, 343.49367088607596], [951.4126582278482, 438.11645569620254]]',4);
+INSERT INTO vectors VALUES(7,2,'river','[[412.1924050632911, 191.8379746835443], [440.7088607594937, 162.0253164556962], [461.4481012658228, 152.95189873417723], [510.7037974683544, 130.91645569620255]]',8);
+INSERT INTO vectors VALUES(8,2,'river','[[255.3518987341772, 710.3189873417722], [317.56962025316454, 719.3924050632911], [365.52911392405065, 718.0962025316455], [390.1569620253165, 718.0962025316455], [413.4886075949367, 733.6506329113924], [431.6354430379747, 742.7240506329114]]',8);
+INSERT INTO vectors VALUES(9,2,'river','[[775.1291139240507, 842.5316455696202], [808.8303797468354, 878.8253164556962], [829.5696202531645, 899.5645569620253], [924.1924050632911, 922.8962025316455], [934.5620253164557, 944.9316455696203], [919.0075949367089, 981.2253164556962], [898.2683544303798, 1018.8151898734177]]',8);
+CREATE TABLE npcs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                node_id INTEGER NOT NULL,
+                name TEXT NOT NULL,
+                role TEXT,
+                personality TEXT,
+                hook TEXT,
+                location TEXT,
+                metadata TEXT,
+                FOREIGN KEY(node_id) REFERENCES nodes(id)
+            );
+INSERT INTO npcs VALUES(1,2,'Father Urien','Village Priest of the Dawn','Cold, distracted, obsessive, and plagued by severe insomnia.','He constantly searches for specific symbols in ancient texts, muttering about ''staving off the true night,'' and visibly avoids touching the Holy Brazier.','Chapel of the Dawn','{}');
+INSERT INTO npcs VALUES(2,2,'Silas','Traveling Provisioner/Fence','Oily, overly cheerful, highly observant, and deeply mercenary.','He claims to be selling rare herbs, but is actually interested in purchasing any ''unusual metals'' or ''old religious artifacts'' the villagers might find, offering exorbitant prices.','Market Square','{}');
+INSERT INTO npcs VALUES(3,2,'Tom','Proprietor of Tom''s Stables','Nervous, overly chatty, easily swayed by bribes, and deeply superstitious about the woods.','He saw someone digging near the scarred oak tree late one night but is too terrified to tell Father Urien, fearing divine retribution for having spied.','Tom''s Stables','{}');
+INSERT INTO npcs VALUES(4,2,'Matriarch Margaret','Head of the Margaret Family Farm','Imperious, deeply practical, fiercely protective of her livestock and paranoid about theft.','She believes the disappearances are caused by neighboring thieves, not monsters, and is secretly stockpiling weapons and setting traps in her barns.','Margaret Family Farm','{}');
+INSERT INTO npcs VALUES(5,2,'Elara','Hermit/Herbalist','Quiet, cynical, possesses deep knowledge of local folklore, and strongly distrusts the Church''s authority.','She uses the Village Well water for her medicinal mixtures and confirms the metallic tang, suggesting it is a poison linked to something ancient stirring beneath the Whisperwood.','Village Well','{}');
+INSERT INTO npcs VALUES(6,2,'Joren','Father Urien''s Apprentice','Mousy, loyal but constantly terrified, prone to crying under pressure.','Joren found a strange, non-human bone fragment near the Chapel altar and hid it in a sack of feed at the stables, hoping Tom knows what creature it came from.','Tom''s Stables','{}');
+PRAGMA writable_schema=ON;
+CREATE TABLE IF NOT EXISTS sqlite_sequence(name,seq);
+DELETE FROM sqlite_sequence;
+INSERT INTO sqlite_sequence VALUES('campaigns',1);
+INSERT INTO sqlite_sequence VALUES('nodes',5);
+INSERT INTO sqlite_sequence VALUES('vectors',9);
+INSERT INTO sqlite_sequence VALUES('markers',8);
+INSERT INTO sqlite_sequence VALUES('npcs',6);
+PRAGMA writable_schema=OFF;
+COMMIT;

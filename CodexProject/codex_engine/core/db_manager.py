@@ -48,6 +48,7 @@ class DBManager:
                 symbol TEXT,
                 title TEXT,
                 description TEXT,
+                metadata TEXT,
                 FOREIGN KEY(node_id) REFERENCES nodes(id)
             );""",
 
@@ -57,6 +58,19 @@ class DBManager:
                 type TEXT, 
                 points_json TEXT,
                 width INTEGER,
+                FOREIGN KEY(node_id) REFERENCES nodes(id)
+            );""",
+            
+            # NEW: Restored NPCs table
+            """CREATE TABLE IF NOT EXISTS npcs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                node_id INTEGER NOT NULL,
+                name TEXT NOT NULL,
+                role TEXT,
+                personality TEXT,
+                hook TEXT,
+                location TEXT,
+                metadata TEXT,
                 FOREIGN KEY(node_id) REFERENCES nodes(id)
             );"""
         ]
@@ -111,6 +125,16 @@ class DBManager:
                 data['metadata'] = json.loads(data['metadata']) if data['metadata'] else {}
                 return data
             return None
+    
+    def get_node(self, node_id: int) -> Optional[dict]:
+        with self.get_connection() as conn:
+            row = conn.execute("SELECT * FROM nodes WHERE id=?", (node_id,)).fetchone()
+            if row:
+                data = dict(row)
+                data['geometry_data'] = json.loads(data['geometry_data']) if data['geometry_data'] else {}
+                data['metadata'] = json.loads(data['metadata']) if data['metadata'] else {}
+                return data
+            return None
 
     def update_node_data(self, node_id: int, geometry: dict = None, metadata: dict = None):
         updates = []
@@ -123,35 +147,92 @@ class DBManager:
         with self.get_connection() as conn: conn.execute(sql, tuple(params)); conn.commit()
 
     # --- MARKERS ---
-    def add_marker(self, node_id, wx, wy, symbol, title, desc=""):
+    def add_marker(self, node_id, wx, wy, symbol, title, desc="", metadata=None):
+        meta_json = json.dumps(metadata if metadata else {})
         with self.get_connection() as conn:
             conn.execute(
-                "INSERT INTO markers (node_id, world_x, world_y, symbol, title, description) VALUES (?,?,?,?,?,?)",
-                (node_id, wx, wy, symbol, title, desc)
+                "INSERT INTO markers (node_id, world_x, world_y, symbol, title, description, metadata) VALUES (?,?,?,?,?,?,?)",
+                (node_id, wx, wy, symbol, title, desc, meta_json)
             )
             conn.commit()
     
-    def update_marker(self, marker_id, wx, wy, symbol, title, desc):
-        with self.get_connection() as conn:
-            conn.execute(
-                "UPDATE markers SET world_x=?, world_y=?, symbol=?, title=?, description=? WHERE id=?",
-                (wx, wy, symbol, title, desc, marker_id)
-            )
+    def update_marker(self, marker_id, world_x=None, world_y=None, symbol=None, title=None, description=None, metadata=None):
+        updates = []
+        params = []
+        if world_x is not None: updates.append("world_x=?"); params.append(world_x)
+        if world_y is not None: updates.append("world_y=?"); params.append(world_y)
+        if symbol is not None: updates.append("symbol=?"); params.append(symbol)
+        if title is not None: updates.append("title=?"); params.append(title)
+        if description is not None: updates.append("description=?"); params.append(description)
+        if metadata is not None: updates.append("metadata=?"); params.append(json.dumps(metadata))
+        
+        if not updates: return
+        
+        params.append(marker_id)
+        sql = f"UPDATE markers SET {', '.join(updates)} WHERE id = ?"
+        with self.get_connection() as conn: 
+            conn.execute(sql, tuple(params))
             conn.commit()
 
     def get_markers(self, node_id):
         with self.get_connection() as conn:
             rows = conn.execute("SELECT * FROM markers WHERE node_id = ?", (node_id,)).fetchall()
-            return [dict(r) for r in rows]
+            results = []
+            for r in rows:
+                d = dict(r)
+                try:
+                    d['metadata'] = json.loads(d['metadata']) if d['metadata'] else {}
+                except json.JSONDecodeError:
+                    d['metadata'] = {}
+                results.append(d)
+            return results
     
     def delete_marker(self, marker_id):
         with self.get_connection() as conn:
             conn.execute("DELETE FROM markers WHERE id = ?", (marker_id,))
             conn.commit()
 
+    # --- NPCs (NEW) ---
+    def add_npc(self, node_id: int, npc_data: Dict[str, Any]):
+        meta_json = json.dumps(npc_data.get('metadata', {}))
+        with self.get_connection() as conn:
+            conn.execute(
+                """INSERT INTO npcs (node_id, name, role, personality, hook, location, metadata)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                (node_id, npc_data.get('name'), npc_data.get('role'), npc_data.get('personality'),
+                 npc_data.get('hook'), npc_data.get('location'), meta_json)
+            )
+            conn.commit()
+
+    def update_npc(self, npc_id: int, npc_data: Dict[str, Any]):
+        updates = []
+        params = []
+        for key in ['name', 'role', 'personality', 'hook', 'location', 'metadata']:
+            if key in npc_data:
+                value = json.dumps(npc_data[key]) if key == 'metadata' else npc_data[key]
+                updates.append(f"{key}=?"); params.append(value)
+        if not updates: return
+        params.append(npc_id)
+        sql = f"UPDATE npcs SET {', '.join(updates)} WHERE id = ?"
+        with self.get_connection() as conn:
+            conn.execute(sql, tuple(params))
+            conn.commit()
+
+    def get_npcs_for_node(self, node_id: int) -> List[dict]:
+        with self.get_connection() as conn:
+            rows = conn.execute("SELECT * FROM npcs WHERE node_id = ?", (node_id,)).fetchall()
+            results = []
+            for r in rows:
+                d = dict(r)
+                try:
+                    d['metadata'] = json.loads(d['metadata']) if d['metadata'] else {}
+                except json.JSONDecodeError:
+                    d['metadata'] = {}
+                results.append(d)
+            return results
+
     # --- VECTORS (Roads/Rivers) ---
     def save_vector(self, node_id, vtype, points, width=5, vector_id=None):
-        """Create or Update a vector line."""
         p_json = json.dumps(points)
         with self.get_connection() as conn:
             if vector_id:

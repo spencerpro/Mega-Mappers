@@ -1,4 +1,3 @@
-
 import pygame
 import numpy as np
 from PIL import Image
@@ -56,7 +55,7 @@ class ImageMapStrategy:
         shaded = np.clip(shaded * self.light_intensity, 0, 1.2)
         return shaded
     
-    def _render_region(self, heightmap_region, sea_level_norm):
+    def _render_region(self, heightmap_region, sea_level_norm, contour_interval=0):
         h, w = heightmap_region.shape
         hillshade = self._calculate_hillshade_region(heightmap_region)
         rgb_array = np.zeros((h, w, 3), dtype=np.float32)
@@ -89,10 +88,26 @@ class ImageMapStrategy:
             
             water_light = 0.85 + (hillshade[water_mask] * 0.15)
             rgb_array[water_mask] *= water_light[:, np.newaxis]
+
+        # --- CONTOUR LINES ---
+        if contour_interval > 0:
+            # Map normalized height to meters using inherited real_min/max
+            height_m = self.real_min + heightmap_region * (self.real_max - self.real_min)
+            
+            # Quantize height into levels
+            levels = np.floor(height_m / contour_interval)
+            
+            # Find edges (pixels where level changes)
+            edges = np.zeros_like(levels, dtype=bool)
+            edges[:-1, :] |= (levels[:-1, :] != levels[1:, :]) # Vertical
+            edges[:, :-1] |= (levels[:, :-1] != levels[:, 1:]) # Horizontal
+            
+            # Draw contours (dark grey)
+            rgb_array[edges] = [40, 40, 40]
         
         return np.clip(rgb_array, 0, 255).astype(np.uint8)
     
-    def draw(self, screen, cam_x, cam_y, zoom, screen_width, screen_height, sea_level_meters=0.0, vectors=None, active_vector=None, selected_point_idx=None):
+    def draw(self, screen, cam_x, cam_y, zoom, screen_width, screen_height, sea_level_meters=0.0, vectors=None, active_vector=None, selected_point_idx=None, contour_interval=0):
         sea_level_norm = (sea_level_meters - self.real_min) / (self.real_max - self.real_min)
         
         x_start, x_end, y_start, y_end = self._get_visible_region(cam_x, cam_y, zoom, screen_width, screen_height)
@@ -100,7 +115,7 @@ class ImageMapStrategy:
         visible_heightmap = self.heightmap[y_start:y_end, x_start:x_end]
         if visible_heightmap.size == 0: return
         
-        rgb_array = self._render_region(visible_heightmap, sea_level_norm)
+        rgb_array = self._render_region(visible_heightmap, sea_level_norm, contour_interval)
         surface = pygame.surfarray.make_surface(np.transpose(rgb_array, (1, 0, 2)))
         
         region_width = x_end - x_start
@@ -126,26 +141,22 @@ class ImageMapStrategy:
             points = vec['points']
             if not points: continue
             
-            # Determine Color
             color = (80, 120, 255) if vec['type'] == 'river' else (160, 82, 45)
             if active_vector and vec is active_vector:
-                color = (255, 255, 0) # Highlight active
+                color = (255, 255, 0)
 
             width = max(2, int(vec['width'] * zoom))
             
-            # 1. Transform Control Points to Screen Space
             screen_pts = []
             for px, py in points:
                 sx = center_x - (cam_x * zoom) + (px * zoom)
                 sy = center_y - (cam_y * zoom) + (py * zoom)
                 screen_pts.append((sx, sy))
             
-            # 2. Draw Curve (if more than 1 point)
             if len(screen_pts) > 1:
                 curve_pts = calculate_catmull_rom(screen_pts)
                 pygame.draw.lines(screen, color, False, curve_pts, width)
             
-            # 3. Draw Control Points (Only if active)
             if active_vector and vec is active_vector:
                 for idx, (sx, sy) in enumerate(screen_pts):
                     pt_color = (255, 0, 0) if idx == selected_point_idx else (255, 255, 255)

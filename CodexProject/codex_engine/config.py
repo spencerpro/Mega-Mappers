@@ -14,5 +14,5 @@ THEMES_DIR.mkdir(parents=True, exist_ok=True)
 MAPS_DIR.mkdir(parents=True, exist_ok=True)
 
 DEFAULT_THEME = "fantasy"
-SCREEN_WIDTH = 1200
-SCREEN_HEIGHT = 900
+SCREEN_WIDTH = 1400
+SCREEN_HEIGHT = 840

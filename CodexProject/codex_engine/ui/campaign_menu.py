@@ -1,6 +1,7 @@
 import pygame
 from codex_engine.core.db_manager import DBManager
 from codex_engine.ui.widgets import Button, InputBox
+from codex_engine.config import SCREEN_HEIGHT # Import SCREEN_HEIGHT
 
 class CampaignMenu:
     def __init__(self, screen, db_manager: DBManager):
@@ -18,7 +19,11 @@ class CampaignMenu:
         self.refresh_list()
         
         self.input_name = InputBox(800, 200, 300, 40, self.font_ui)
-        self.btn_new = Button(50, 800, 200, 50, "New Campaign", self.font_ui, (100, 200, 100), (150, 250, 150), (0,0,0), self.switch_to_create)
+        
+        # --- FIX: Use SCREEN_HEIGHT for positioning ---
+        button_y = SCREEN_HEIGHT - 100 
+        self.btn_new = Button(50, button_y, 200, 50, "New Campaign", self.font_ui, (100, 200, 100), (150, 250, 150), (0,0,0), self.switch_to_create)
+        
         self.btn_create = Button(800, 400, 200, 50, "Create World", self.font_ui, (100, 200, 100), (150, 250, 150), (0,0,0), self.do_create)
         self.btn_cancel = Button(1020, 400, 150, 50, "Cancel", self.font_ui, (200, 100, 100), (250, 150, 150), (0,0,0), self.switch_to_select)
         
@@ -57,7 +62,11 @@ class CampaignMenu:
 
     def draw(self):
         self.screen.fill(self.c_bg)
-        pygame.draw.rect(self.screen, self.c_panel, (30, 30, 640, 840), border_radius=10)
+        
+        # --- FIX: Use SCREEN_HEIGHT for panel height ---
+        panel_height = SCREEN_HEIGHT - 60
+        pygame.draw.rect(self.screen, self.c_panel, (30, 30, 640, panel_height), border_radius=10)
+        
         title = self.font_title.render("Campaign Chronicles", True, self.c_text)
         self.screen.blit(title, (50, 50))
         
@@ -75,8 +84,10 @@ class CampaignMenu:
         if self.mode == "SELECT":
             self.btn_new.draw(self.screen)
             if self.selected_campaign_id:
+                # --- FIX: Use SCREEN_HEIGHT for instruction text ---
+                instr_y = SCREEN_HEIGHT - 85
                 instr = self.font_ui.render("Click Selected to Launch", True, (200, 200, 200))
-                self.screen.blit(instr, (400, 815))
+                self.screen.blit(instr, (400, instr_y))
                 
         elif self.mode == "CREATE":
             pygame.draw.rect(self.screen, self.c_panel, (750, 100, 420, 400), border_radius=10)
