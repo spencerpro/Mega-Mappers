@@ -1,0 +1,56 @@
+{
+  "id": "farm_complex",
+  "type": "compound",
+  "name": "Prosperous Farm",
+  "plot_size": {
+    "width": {
+      "min": 50,
+      "max": 60
+    },
+    "height": {
+      "min": 50,
+      "max": 60
+    }
+  },
+  "components": [
+    {
+      "blueprint_id": "house_medium",
+      "offset": {
+        "x": 20,
+        "y": 20
+      },
+      "connections": [
+        {
+          "entry_key": "main_door"
+        },
+        {
+          "entry_key": "cellar_hatch"
+        }
+      ]
+    },
+    {
+      "blueprint_id": "stable_long",
+      "offset": {
+        "x": 5,
+        "y": 25
+      },
+      "connections": [
+        {
+          "entry_key": "wide_door"
+        }
+      ]
+    },
+    {
+      "blueprint_id": "shed_small",
+      "offset": {
+        "x": 35,
+        "y": 5
+      },
+      "connections": [
+        {
+          "entry_key": "door"
+        }
+      ]
+    }
+  ]
+}

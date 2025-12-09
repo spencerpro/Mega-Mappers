@@ -1,0 +1,30 @@
+{
+  "id": "cottage_small",
+  "type": "structure",
+  "name": "Small Cottage",
+  "dimensions": {
+    "width": {
+      "min": 10,
+      "max": 12
+    },
+    "height": {
+      "min": 8,
+      "max": 10
+    }
+  },
+  "floors": [
+    {
+      "id": "ground",
+      "level": 0,
+      "name": "Living Area"
+    }
+  ],
+  "external_entries": [
+    {
+      "key": "front_door",
+      "floor_id": "ground",
+      "wall": "south",
+      "align": "center"
+    }
+  ]
+}

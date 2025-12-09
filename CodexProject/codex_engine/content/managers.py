@@ -117,27 +117,3 @@ class TacticalContent(ContentManager):
             lines.append("")
             
         return lines
-
-class TacticalContent_old(ContentManager):
-    def get_info_text(self):
-        meta = self.node.get('metadata', {})
-        geo = self.node.get('geometry_data', {})
-        
-        lines = []
-        lines.append(f"SITE: {self.node.get('name')}")
-        lines.append(f"Type: {self.node.get('type').replace('_', ' ').title()}")
-        lines.append(f"Size: {geo.get('width')}x{geo.get('height')} Tiles")
-        lines.append("")
-        
-        overview = meta.get('overview', "")
-        if overview:
-            lines.append("--- DESCRIPTION ---")
-            lines.extend(textwrap.wrap(overview, width=35))
-            lines.append("")
-            
-        # Count Entities
-        markers = self.db.get_markers(self.node['id'])
-        if markers:
-            lines.append(f"Objects/Markers: {len(markers)}")
-            
-        return lines

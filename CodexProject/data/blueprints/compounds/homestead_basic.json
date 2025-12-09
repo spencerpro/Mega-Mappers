@@ -1,0 +1,41 @@
+{
+  "id": "homestead_basic",
+  "type": "compound",
+  "name": "Basic Homestead",
+  "plot_size": {
+    "width": {
+      "min": 35,
+      "max": 45
+    },
+    "height": {
+      "min": 35,
+      "max": 45
+    }
+  },
+  "components": [
+    {
+      "blueprint_id": "cottage_small",
+      "offset": {
+        "x": 15,
+        "y": 10
+      },
+      "connections": [
+        {
+          "entry_key": "front_door"
+        }
+      ]
+    },
+    {
+      "blueprint_id": "outhouse",
+      "offset": {
+        "x": 30,
+        "y": 5
+      },
+      "connections": [
+        {
+          "entry_key": "door"
+        }
+      ]
+    }
+  ]
+}

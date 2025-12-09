@@ -1,0 +1,30 @@
+{
+  "id": "stable_long",
+  "type": "structure",
+  "name": "Stables",
+  "dimensions": {
+    "width": {
+      "min": 15,
+      "max": 20
+    },
+    "height": {
+      "min": 8,
+      "max": 10
+    }
+  },
+  "floors": [
+    {
+      "id": "ground",
+      "level": 0,
+      "name": "Stalls"
+    }
+  ],
+  "external_entries": [
+    {
+      "key": "wide_door",
+      "floor_id": "ground",
+      "wall": "west",
+      "align": "center"
+    }
+  ]
+}

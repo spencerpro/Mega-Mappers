@@ -1,0 +1,13 @@
+{
+  "id": "caverns_deep",
+  "type": "dungeon_procedural",
+  "name": "Deep Caverns",
+  "description": "A sprawling subterranean complex.",
+  "config": {
+    "depth": 5,
+    "min_room_size": 10,
+    "max_room_size": 20,
+    "complexity": 1.5,
+    "theme": "natural_rock"
+  }
+}

@@ -1,0 +1,42 @@
+{
+  "id": "chapel_stone",
+  "type": "structure",
+  "name": "Stone Chapel",
+  "dimensions": {
+    "width": {
+      "min": 14,
+      "max": 18
+    },
+    "height": {
+      "min": 20,
+      "max": 25
+    }
+  },
+  "floors": [
+    {
+      "id": "nave",
+      "level": 0,
+      "name": "Nave"
+    },
+    {
+      "id": "crypt",
+      "level": -1,
+      "name": "Undercroft"
+    }
+  ],
+  "internal_links": [
+    {
+      "from": "nave",
+      "to": "crypt",
+      "type": "stairs"
+    }
+  ],
+  "external_entries": [
+    {
+      "key": "double_doors",
+      "floor_id": "nave",
+      "wall": "south",
+      "align": "center"
+    }
+  ]
+}

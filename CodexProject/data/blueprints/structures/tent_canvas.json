@@ -1,0 +1,24 @@
+{
+  "id": "tent_canvas",
+  "type": "structure",
+  "name": "Canvas Tent",
+  "dimensions": {
+    "width": 6,
+    "height": 6
+  },
+  "floors": [
+    {
+      "id": "ground",
+      "level": 0,
+      "name": "Interior"
+    }
+  ],
+  "external_entries": [
+    {
+      "key": "flap",
+      "floor_id": "ground",
+      "wall": "south",
+      "align": "center"
+    }
+  ]
+}

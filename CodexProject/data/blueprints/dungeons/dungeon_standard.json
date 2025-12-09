@@ -1,0 +1,13 @@
+{
+  "id": "dungeon_standard",
+  "type": "dungeon_procedural",
+  "name": "Standard Dungeon",
+  "description": "A randomly generated network of rooms and corridors.",
+  "config": {
+    "depth": 3,
+    "min_room_size": 6,
+    "max_room_size": 12,
+    "complexity": 1.0,
+    "theme": "stone"
+  }
+}

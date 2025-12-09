@@ -1,0 +1,35 @@
+{
+  "id": "church_grounds",
+  "type": "compound",
+  "name": "Parish Grounds",
+  "plot_size": {
+    "width": 40,
+    "height": 60
+  },
+  "components": [
+    {
+      "blueprint_id": "chapel_stone",
+      "offset": {
+        "x": 10,
+        "y": 15
+      },
+      "connections": [
+        {
+          "entry_key": "double_doors"
+        }
+      ]
+    },
+    {
+      "blueprint_id": "cottage_small",
+      "offset": {
+        "x": 25,
+        "y": 45
+      },
+      "connections": [
+        {
+          "entry_key": "front_door"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "id": "shed_small",
+  "type": "structure",
+  "name": "Tool Shed",
+  "dimensions": {
+    "width": {
+      "min": 6,
+      "max": 8
+    },
+    "height": {
+      "min": 5,
+      "max": 7
+    }
+  },
+  "floors": [
+    {
+      "id": "ground",
+      "level": 0,
+      "name": "Interior"
+    }
+  ],
+  "external_entries": [
+    {
+      "key": "door",
+      "floor_id": "ground",
+      "wall": "south",
+      "align": 2
+    }
+  ]
+}

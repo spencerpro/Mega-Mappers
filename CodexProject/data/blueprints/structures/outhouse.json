@@ -1,0 +1,24 @@
+{
+  "id": "outhouse",
+  "type": "structure",
+  "name": "Outhouse",
+  "dimensions": {
+    "width": 4,
+    "height": 4
+  },
+  "floors": [
+    {
+      "id": "ground",
+      "level": 0,
+      "name": "Interior"
+    }
+  ],
+  "external_entries": [
+    {
+      "key": "door",
+      "floor_id": "ground",
+      "wall": "south",
+      "align": "center"
+    }
+  ]
+}

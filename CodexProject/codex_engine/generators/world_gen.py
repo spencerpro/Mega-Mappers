@@ -128,29 +128,6 @@ class WorldGenerator:
             
         return smoothed_terrain
 
-    def _brute_force_smooth_and_dither_old(self, terrain, iterations=1, size=3):
-        """
-        Applies a sizexsize averaging blur using scipy.signal.convolve2d and then
-        adds a 0 or 1 (scaled) dither amount to each pixel in each pass.
-        """
-
-        # Kernel for averaging the 3x3 neighborhood
-        kernel = np.ones((size, size)) / size**2
-        
-        # The amount of noise is equivalent to a single step in the 16-bit range
-        dither_step = 1.0 / 65535.0
-        
-        smoothed_terrain = terrain.copy()
-        
-        for i in range(iterations):
-            smoothed_terrain = convolve2d(smoothed_terrain, kernel, mode='same', boundary='wrap')
-            
-            
-        dither_noise = np.random.randint(0, 10, size=smoothed_terrain.shape) * dither_step
-        smoothed_terrain += dither_noise
-
-        return smoothed_terrain
-
     def _diamond_square(self, width, height, roughness):
         map_data = np.zeros((height, width))
         for octave in range(8):

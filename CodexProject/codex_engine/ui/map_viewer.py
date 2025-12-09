@@ -26,27 +26,36 @@ class MapViewer:
         self.current_node = node_data
         metadata = node_data.get('metadata', {})
         geo = node_data.get('geometry_data', {})
-
         node_type = node_data.get('type', 'world_map')
         
-        if node_type in ['world_map', 'local_map']:
-            self.controller = GeoController(self.db, node_data, self.theme)
-        elif node_type in ['dungeon_level', 'building_interior']:
+        if node_type in ['dungeon_level', 'building_interior', 'tactical_map']:
             self.controller = TacticalController(self.db, node_data, self.theme)
+            if 'cam_x' in metadata:
+                self.cam_x, self.cam_y = metadata['cam_x'], metadata['cam_y']
+                self.zoom = metadata.get('zoom', 1.0)
+            else:
+                self.cam_x = geo.get('width', 30) / 2
+                self.cam_y = geo.get('height', 30) / 2
+                self.zoom = 1.0
         else:
             self.controller = GeoController(self.db, node_data, self.theme)
+            if 'cam_x' in metadata:
+                self.cam_x, self.cam_y = metadata['cam_x'], metadata['cam_y']
+                self.zoom = metadata.get('zoom', 1.0)
+            else:
+                self.cam_x, self.cam_y, self.zoom = 0, 0, 1.0
 
-        # Restore Camera or set default
-        if 'cam_x' in metadata:
-            self.cam_x, self.cam_y = metadata['cam_x'], metadata['cam_y']
-            self.zoom = metadata.get('zoom', 1.0)
-        elif node_type in ['dungeon_level', 'building_interior']:
-            # FIX: Center camera on tactical maps if not set
-            self.cam_x = geo.get('width', 30) / 2
-            self.cam_y = geo.get('height', 30) / 2
-            self.zoom = 1.0
-        else:
-            self.cam_x, self.cam_y, self.zoom = 0, 0, 1.0
+    def handle_zoom(self, direction, mouse_pos):
+        """Zooms into the center of the screen, using the controller's speed."""
+        if not self.controller: return
+
+        # Get the zoom speed from the active controller
+        zoom_speed = getattr(self.controller, 'zoom_factor', 1.2)
+        
+        if direction > 0: # Scroll up
+            self.zoom = min(20.0, self.zoom * zoom_speed)
+        else: # Scroll down
+            self.zoom = max(0.05, self.zoom / zoom_speed)
 
     def save_current_state(self):
         if not self.current_node or not self.controller: return
@@ -61,21 +70,16 @@ class MapViewer:
     def handle_input(self, event):
         if not self.controller: return
 
+        # RESTORED: Keyboard zoom works again
         if event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_LEFTBRACKET:
+                self.zoom = max(0.1, self.zoom * 0.9)
+                return
+            if event.key == pygame.K_RIGHTBRACKET:
+                self.zoom = min(20.0, self.zoom * 1.1)
+                return
             if event.key == pygame.K_h: self.show_ui = not self.show_ui; return
             if event.key == pygame.K_s: self.save_current_state(); return
-
-        keys = pygame.key.get_pressed()
-        speed = 5 / self.zoom 
-        if keys[pygame.K_LSHIFT]: speed *= 3
-        if keys[pygame.K_LEFT]: self.cam_x -= speed
-        if keys[pygame.K_RIGHT]: self.cam_x += speed
-        if keys[pygame.K_UP]: self.cam_y -= speed
-        if keys[pygame.K_DOWN]: self.cam_y += speed
-        
-        if event.type == pygame.KEYDOWN:
-            if event.key == pygame.K_LEFTBRACKET: self.zoom = max(0.1, self.zoom * 0.9)
-            if event.key == pygame.K_RIGHTBRACKET: self.zoom = min(10.0, self.zoom * 1.1)
 
         result = self.controller.handle_input(event, self.cam_x, self.cam_y, self.zoom)
         
@@ -100,11 +104,10 @@ class MapViewer:
         pygame.draw.rect(self.screen, (30,30,40), (0,0,260, SCREEN_HEIGHT))
         pygame.draw.rect(self.screen, (100,100,100), (0,0,260, SCREEN_HEIGHT), 2)
         if self.current_node: 
-            title = "Unknown"
-            if self.current_node['type'] == 'local_map': title = "Local Map"
-            elif self.current_node['type'] == 'world_map': title = "World Map"
-            elif self.current_node['type'] in ['dungeon_level', 'building_interior']: title = "Tactical Map"
-            self.screen.blit(self.font_title.render(title, True, (255,255,255)), (20,15))
+            title = self.current_node.get('name', 'Unknown')
+            type_str = self.current_node.get('type', 'unknown').replace('_', ' ').title()
+            self.screen.blit(self.font_title.render(f"{title}", True, (255,255,255)), (20,15))
+            self.screen.blit(self.font_ui.render(f"({type_str})", True, (150,150,150)), (20,45))
 
         if self.controller:
             for widget in self.controller.widgets: widget.draw(self.screen)
@@ -113,10 +116,22 @@ class MapViewer:
                 self.screen.blit(lbl, (20, 370))
 
     def _draw_scale_bar(self):
-        grid_size = getattr(self.controller, 'grid_size', 32)
-        km_per_unit = (grid_size / self.zoom) * 1.0 
-        text = f"Scale: 1 Unit = {km_per_unit:.2f} m" if self.current_node['type'] != 'world_map' else f"Scale: 1 Unit = {km_per_unit:.2f} km"
+        map_width_m = self.current_node.get('geometry_data', {}).get('width', 100)
+        if self.current_node['type'] == 'world_map': unit, scale_factor = "km", 1000
+        else: unit, scale_factor = "m", map_width_m
+        
+        units_per_pixel = (scale_factor / self.current_node.get('metadata',{}).get('width', 1024)) / self.zoom
+        bar_width_px = 100
+        bar_units = bar_width_px * units_per_pixel
+
+        text = f"{bar_units:.1f} {unit}"
         ts = self.font_ui.render(text, True, (200,200,200))
-        bg = ts.get_rect(bottomright=(SCREEN_WIDTH-20, SCREEN_HEIGHT-20)); bg.inflate_ip(20,10)
-        pygame.draw.rect(self.screen, (0,0,0,150), bg, border_radius=5)
-        self.screen.blit(ts, (bg.x+10, bg.y+5))
+        
+        bg_rect = pygame.Rect(SCREEN_WIDTH - 140, SCREEN_HEIGHT - 40, 120, 30)
+        pygame.draw.rect(self.screen, (0,0,0,150), bg_rect, border_radius=5)
+        
+        line_y = bg_rect.centery + 5
+        pygame.draw.line(self.screen, (200,200,200), (bg_rect.x + 10, line_y), (bg_rect.x + 10 + bar_width_px, line_y), 2)
+        
+        text_rect = ts.get_rect(midbottom=(bg_rect.centerx, line_y - 2))
+        self.screen.blit(ts, text_rect)

@@ -1,0 +1,64 @@
+{
+  "id": "house_medium",
+  "type": "structure",
+  "name": "Timber House (2 Story)",
+  "dimensions": {
+    "width": {
+      "min": 12,
+      "max": 16
+    },
+    "height": {
+      "min": 10,
+      "max": 14
+    }
+  },
+  "floors": [
+    {
+      "id": "cellar",
+      "level": -1,
+      "name": "Root Cellar"
+    },
+    {
+      "id": "ground",
+      "level": 0,
+      "name": "Common Room"
+    },
+    {
+      "id": "upper",
+      "level": 1,
+      "name": "Bedrooms"
+    }
+  ],
+  "internal_links": [
+    {
+      "from": "ground",
+      "to": "upper",
+      "type": "stairs"
+    },
+    {
+      "from": "ground",
+      "to": "cellar",
+      "type": "ladder"
+    }
+  ],
+  "external_entries": [
+    {
+      "key": "main_door",
+      "floor_id": "ground",
+      "wall": "south",
+      "align": "center"
+    },
+    {
+      "key": "side_door",
+      "floor_id": "ground",
+      "wall": "east",
+      "align": 2
+    },
+    {
+      "key": "cellar_hatch",
+      "floor_id": "cellar",
+      "wall": "north",
+      "align": 2
+    }
+  ]
+}

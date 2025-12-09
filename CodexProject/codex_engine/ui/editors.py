@@ -1,7 +1,9 @@
 import pygame
 import json
+import textwrap
 from codex_engine.config import SCREEN_WIDTH, SCREEN_HEIGHT
-
+from codex_engine.ui.widgets import Dropdown
+from codex_engine.generators.building_gen import get_available_blueprints
 
 def get_text_input(prompt):
     """A blocking function to get a single line of text input."""
@@ -78,7 +80,7 @@ class PygameMarkerEditor:
             self.sym_map = {"village": "house", "lair": "skull", "landmark": "star"}
         else:
             self.type_opts = ["building", "lair", "portal", "note"]
-            self.sym_map = {"building": "house", "lair": "skull", "portal": "star", "note": "star"}
+            self.sym_map = {"building": "house", "lair": "skull", "portal": "door", "note": "star"}
             
         self.current_type_idx = 0
         # Try to match current symbol to type
@@ -97,6 +99,23 @@ class PygameMarkerEditor:
         self.x = (SCREEN_WIDTH - self.panel_w) // 2
         self.y = (SCREEN_HEIGHT - self.panel_h) // 2
         
+        # --- BLUEPRINT DROPDOWN SETUP ---
+        # Only relevant for Local Maps
+        self.show_blueprints = (map_context == "local_map")
+        self.dd_blueprint = None
+        
+        if self.show_blueprints:
+            self.blueprint_list = get_available_blueprints()
+            current_bp_id = marker_data.get('metadata', {}).get('blueprint_id')
+            
+            # Positioned right of the Type button
+            self.dd_blueprint = Dropdown(
+                self.x + 240, self.y + 120, 220, 30, 
+                self.font, 
+                self.blueprint_list, 
+                initial_id=current_bp_id
+            )
+
         # Start Blocking Loop
         self.run_loop()
 
@@ -110,6 +129,15 @@ class PygameMarkerEditor:
                 if event.type == pygame.QUIT:
                     running = False
                     return # Cancel without saving
+                
+                # --- HANDLE DROPDOWN FIRST ---
+                # This ensures the dropdown captures clicks when open, preventing click-through
+                if self.show_blueprints and self.dd_blueprint:
+                    # Only interactive if current type is relevant
+                    current_type = self.type_opts[self.current_type_idx]
+                    if current_type in ['building', 'village', 'landmark']:
+                        if self.dd_blueprint.handle_event(event):
+                            continue 
                 
                 if event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_ESCAPE:
@@ -182,6 +210,16 @@ class PygameMarkerEditor:
         chosen_type = self.type_opts[self.current_type_idx]
         symbol = self.sym_map.get(chosen_type, "star")
         
+        # --- HANDLE BLUEPRINT SAVE ---
+        if self.show_blueprints and self.dd_blueprint and chosen_type in ['building', 'village', 'landmark']:
+            bp_id = self.dd_blueprint.get_selected_id()
+            if bp_id:
+                meta_obj['blueprint_id'] = bp_id
+                # Optional: Update description if empty and blueprint selected
+                if not self.desc_text:
+                    bp_name = next((b['name'] for b in self.blueprint_list if b['id'] == bp_id), "Structure")
+                    self.desc_text = f"A {bp_name}."
+
         self.on_save(
             self.marker_data.get('id'),
             symbol,
@@ -226,6 +264,12 @@ class PygameMarkerEditor:
         ts = self.font.render(type_txt, True, (255, 255, 255))
         self.screen.blit(ts, (self.btn_type.x + 10, self.btn_type.y + 7))
 
+        # --- DRAW BLUEPRINT LABEL (IF APPLICABLE) ---
+        current_type = self.type_opts[self.current_type_idx]
+        if self.show_blueprints and self.dd_blueprint and current_type in ['building', 'village', 'landmark']:
+            # Dropdown itself is drawn last to appear on top, but we draw label here
+            pass 
+
         # --- DESCRIPTION ---
         lbl_d = self.font.render("Description:", True, (200, 200, 200))
         self.screen.blit(lbl_d, (self.x + 20, self.y + 160))
@@ -258,7 +302,26 @@ class PygameMarkerEditor:
         ct = self.font.render("Cancel", True, (255, 255, 255))
         self.screen.blit(ct, (self.btn_cancel.x + 20, self.btn_cancel.y + 12))
 
+        # --- DRAW BLUEPRINT DROPDOWN LAST ---
+        # We draw this last so the open list renders ON TOP of description/metadata/buttons
+        if self.show_blueprints and self.dd_blueprint and current_type in ['building', 'village', 'landmark']:
+            self.dd_blueprint.draw(self.screen)
+ 
     def _draw_multiline(self, text, rect):
+        y_off = 5
+        # This width is an estimate. Adjust if text doesn't fit the box well.
+        char_width = 55 
+        
+        # Apply the same logic as the tooltip
+        wrapped_lines = textwrap.wrap(text, width=char_width)
+
+        for line in wrapped_lines:
+            if y_off + self.font.get_height() > rect.height: break
+            surf = self.font.render(line, True, (220, 220, 220))
+            self.screen.blit(surf, (rect.x + 5, rect.y + y_off))
+            y_off += self.font.get_height()
+
+    def _draw_multiline_old(self, text, rect):
         lines = text.split('\n')
         y_off = 5
         for line in lines:

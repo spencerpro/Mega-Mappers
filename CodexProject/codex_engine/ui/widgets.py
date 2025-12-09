@@ -193,94 +193,136 @@ class MarkerModal:
         self.btn_cancel.draw(surface)
         if self.btn_gen: self.btn_gen.draw(surface)
 
-class MarkerModal_old:
-    def __init__(self, x, y, on_save, on_cancel, marker_data=None):
-        self.is_editing = marker_data is not None
-        self.marker_id = marker_data['id'] if self.is_editing else None
+
+class Dropdown:
+    def __init__(self, x, y, w, h, font, options, initial_id=None):
+        self.rect = pygame.Rect(x, y, w, h)
+        self.font = font
+        self.options = options # List of dicts {'id': 'x', 'name': 'Y'}
+        self.is_open = False
+        self.selected_idx = -1
         
-        self.rect = pygame.Rect(x, y, 300, 300) # Made taller for options
-        self.on_save = on_save
-        self.on_cancel = on_cancel
-        self.font = pygame.font.Font(None, 24)
-        
-        title = marker_data['title'] if self.is_editing else ""
-        note = marker_data['description'] if self.is_editing else ""
-        
-        self.input_title = InputBox(x+20, y+50, 260, 32, self.font, text=title)
-        self.input_note = InputBox(x+20, y+100, 260, 32, self.font, text=note)
-        
-        # --- NEW: TYPE SELECTION ---
-        self.types = [
-            {"label": "Village", "icon": "🏰"},
-            {"label": "Dungeon", "icon": "💀"},
-            {"label": "Note", "icon": "📜"}
-        ]
-        
-        # Default or Existing Selection
-        self.selected_type_idx = 0
-        if self.is_editing:
-            for i, t in enumerate(self.types):
-                if t['icon'] == marker_data['symbol']:
-                    self.selected_type_idx = i
+        # Find initial selection
+        if initial_id:
+            for i, opt in enumerate(options):
+                if opt['id'] == initial_id:
+                    self.selected_idx = i
                     break
         
-        self.btn_save = Button(x+20, y+250, 100, 30, "Save", self.font, (100,200,100), (150,250,150), (0,0,0), self.trigger_save)
-        self.btn_cancel = Button(x+180, y+250, 100, 30, "Cancel", self.font, (200,100,100), (250,150,150), (0,0,0), on_cancel)
+        # Style
+        self.color_bg = (30, 30, 40)
+        self.color_border = (100, 100, 120)
+        self.color_hover = (60, 60, 80)
 
-    def trigger_save(self):
-        if self.input_title.text:
-            selected = self.types[self.selected_type_idx]
-            self.on_save(self.marker_id, selected['icon'], self.input_title.text, self.input_note.text)
+    def get_selected_id(self):
+        if self.selected_idx >= 0 and self.selected_idx < len(self.options):
+            return self.options[self.selected_idx]['id']
+        return None
 
     def handle_event(self, event):
-        self.input_title.handle_event(event)
-        self.input_note.handle_event(event)
-        self.btn_save.handle_event(event)
-        self.btn_cancel.handle_event(event)
-        
         if event.type == pygame.MOUSEBUTTONDOWN:
-            # Type Selection Logic
-            sx, sy = self.rect.x + 20, self.rect.y + 160
-            for i, t in enumerate(self.types):
-                r = pygame.Rect(sx, sy, 80, 40)
-                if r.collidepoint(event.pos):
-                    self.selected_type_idx = i
-                sx += 90
+            if self.is_open:
+                # Check clicks in the dropdown list
+                for i in range(len(self.options)):
+                    # Calculate rect for this option
+                    opt_rect = pygame.Rect(self.rect.x, self.rect.bottom + (i * 30), self.rect.width, 30)
+                    if opt_rect.collidepoint(event.pos):
+                        self.selected_idx = i
+                        self.is_open = False
+                        return True
+                # Click outside closes it
+                self.is_open = False
+            else:
+                # Toggle open
+                if self.rect.collidepoint(event.pos):
+                    self.is_open = True
+                    return True
+        return False
 
     def draw(self, surface):
-        pygame.draw.rect(surface, (50, 50, 60), self.rect, border_radius=10)
-        pygame.draw.rect(surface, (200, 200, 200), self.rect, 2, border_radius=10)
+        # Draw Main Box
+        pygame.draw.rect(surface, self.color_bg, self.rect)
+        pygame.draw.rect(surface, self.color_border, self.rect, 1)
         
-        lbl = self.font.render("Marker Details", True, (255,255,255))
-        surface.blit(lbl, (self.rect.x+20, self.rect.y+10))
+        # Draw Selected Text
+        text = "Select Blueprint..."
+        if self.selected_idx >= 0:
+            text = self.options[self.selected_idx]['name']
         
-        lbl_t = self.font.render("Title:", True, (200,200,200))
-        surface.blit(lbl_t, (self.rect.x+20, self.rect.y+35))
-        self.input_title.draw(surface)
+        surf = self.font.render(text, True, (255, 255, 255))
+        surface.blit(surf, (self.rect.x + 5, self.rect.y + 8))
         
-        lbl_n = self.font.render("Note:", True, (200,200,200))
-        surface.blit(lbl_n, (self.rect.x+20, self.rect.y+85))
-        self.input_note.draw(surface)
-        
-        # Type Buttons
-        sx, sy = self.rect.x + 20, self.rect.y + 160
-        for i, t in enumerate(self.types):
-            color = (100, 100, 150) if i == self.selected_type_idx else (70, 70, 80)
-            pygame.draw.rect(surface, color, (sx, sy, 80, 40), border_radius=5)
-            pygame.draw.rect(surface, (0,0,0), (sx, sy, 80, 40), 1, border_radius=5)
+        # Draw Arrow
+        pygame.draw.polygon(surface, (200, 200, 200), [
+            (self.rect.right - 15, self.rect.y + 10),
+            (self.rect.right - 5, self.rect.y + 10),
+            (self.rect.right - 10, self.rect.y + 20)
+        ])
+
+        # Draw List (if open)
+        if self.is_open:
+            # Draw a giant background for the list
+            list_h = len(self.options) * 30
+            list_rect = pygame.Rect(self.rect.x, self.rect.bottom, self.rect.width, list_h)
+            pygame.draw.rect(surface, (25, 25, 30), list_rect)
+            pygame.draw.rect(surface, self.color_border, list_rect, 1)
             
-            # Icon + Label
-            try:
-                # Some fonts fail emoji, simple fallback
-                ic = self.font.render(t['icon'], True, (255,255,255))
-                surface.blit(ic, (sx+30, sy+5))
-            except:
-                pass
+            mx, my = pygame.mouse.get_pos()
+            
+            for i, opt in enumerate(self.options):
+                r = pygame.Rect(self.rect.x, self.rect.bottom + (i * 30), self.rect.width, 30)
                 
-            lab = pygame.font.Font(None, 18).render(t['label'], True, (200,200,200))
-            surface.blit(lab, (sx+5, sy+25))
+                # Highlight hover
+                if r.collidepoint((mx, my)):
+                    pygame.draw.rect(surface, self.color_hover, r)
+                
+                # Draw Text
+                # Prefix structures vs compounds for clarity
+                prefix = "[C] " if opt.get('type') == 'compounds' else "    "
+                label = prefix + opt['name']
+                
+                txt = self.font.render(label, True, (220, 220, 220))
+                surface.blit(txt, (r.x + 5, r.y + 8))
+
+class ContextMenu:
+    def __init__(self, x, y, options, font):
+        self.options = options  # List of tuples: ("Label", callback_function)
+        self.font = font
+        self.item_height = 30
+        
+        # Calculate dimensions
+        max_width = max(font.size(opt[0])[0] for opt in options) + 20
+        self.rect = pygame.Rect(x, y, max_width, len(options) * self.item_height)
+        
+        # Style
+        self.bg_color = (40, 40, 50)
+        self.border_color = (100, 100, 120)
+        self.hover_color = (60, 60, 80)
+        self.text_color = (220, 220, 220)
+
+    def handle_event(self, event):
+        if event.type == pygame.MOUSEBUTTONDOWN:
+            if self.rect.collidepoint(event.pos):
+                # Click is inside the menu, find which item
+                item_index = (event.pos[1] - self.rect.y) // self.item_height
+                if 0 <= item_index < len(self.options):
+                    self.options[item_index][1]() # Call the callback function
+                return True # Event handled, close menu
+            else:
+                # Click is outside, close menu
+                return True 
+        return False
+
+    def draw(self, surface):
+        pygame.draw.rect(surface, self.bg_color, self.rect)
+        pygame.draw.rect(surface, self.border_color, self.rect, 1)
+        
+        mx, my = pygame.mouse.get_pos()
+        
+        for i, (label, _) in enumerate(self.options):
+            item_rect = pygame.Rect(self.rect.x, self.rect.y + i * self.item_height, self.rect.width, self.item_height)
+            if item_rect.collidepoint(mx, my):
+                pygame.draw.rect(surface, self.hover_color, item_rect)
             
-            sx += 90
-            
-        self.btn_save.draw(surface)
-        self.btn_cancel.draw(surface)
+            text_surf = self.font.render(label, True, self.text_color)
+            surface.blit(text_surf, (item_rect.x + 10, item_rect.y + 7))

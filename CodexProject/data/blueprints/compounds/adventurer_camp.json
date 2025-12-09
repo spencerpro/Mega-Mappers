@@ -1,0 +1,47 @@
+{
+  "id": "adventurer_camp",
+  "type": "compound",
+  "name": "Traveler's Camp",
+  "plot_size": {
+    "width": 30,
+    "height": 30
+  },
+  "components": [
+    {
+      "blueprint_id": "tent_canvas",
+      "offset": {
+        "x": 5,
+        "y": 5
+      },
+      "connections": [
+        {
+          "entry_key": "flap"
+        }
+      ]
+    },
+    {
+      "blueprint_id": "tent_canvas",
+      "offset": {
+        "x": 18,
+        "y": 5
+      },
+      "connections": [
+        {
+          "entry_key": "flap"
+        }
+      ]
+    },
+    {
+      "blueprint_id": "tent_canvas",
+      "offset": {
+        "x": 12,
+        "y": 18
+      },
+      "connections": [
+        {
+          "entry_key": "flap"
+        }
+      ]
+    }
+  ]
+}
