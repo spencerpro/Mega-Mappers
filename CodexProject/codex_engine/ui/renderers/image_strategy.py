@@ -4,6 +4,9 @@ from PIL import Image
 from codex_engine.config import MAPS_DIR
 from codex_engine.utils.spline import calculate_catmull_rom
 
+COLOR_RIVER = (80, 120, 255)
+COLOR_ROAD = (160, 82, 45)
+
 class ImageMapStrategy:
     def __init__(self, metadata, theme_manager):
         self.theme = theme_manager
@@ -89,20 +92,12 @@ class ImageMapStrategy:
             water_light = 0.85 + (hillshade[water_mask] * 0.15)
             rgb_array[water_mask] *= water_light[:, np.newaxis]
 
-        # --- CONTOUR LINES ---
         if contour_interval > 0:
-            # Map normalized height to meters using inherited real_min/max
             height_m = self.real_min + heightmap_region * (self.real_max - self.real_min)
-            
-            # Quantize height into levels
             levels = np.floor(height_m / contour_interval)
-            
-            # Find edges (pixels where level changes)
             edges = np.zeros_like(levels, dtype=bool)
-            edges[:-1, :] |= (levels[:-1, :] != levels[1:, :]) # Vertical
-            edges[:, :-1] |= (levels[:, :-1] != levels[:, 1:]) # Horizontal
-            
-            # Draw contours (dark grey)
+            edges[:-1, :] |= (levels[:-1, :] != levels[1:, :])
+            edges[:, :-1] |= (levels[:, :-1] != levels[:, 1:])
             rgb_array[edges] = [40, 40, 40]
         
         return np.clip(rgb_array, 0, 255).astype(np.uint8)
@@ -132,7 +127,6 @@ class ImageMapStrategy:
             draw_y = center_y - int(cam_y * zoom) + int(y_start * zoom)
             screen.blit(scaled_surface, (draw_x, draw_y))
 
-        # --- DRAW VECTORS ---
         all_vectors = []
         if vectors: all_vectors.extend(vectors)
         if active_vector: all_vectors.append(active_vector)
@@ -141,7 +135,7 @@ class ImageMapStrategy:
             points = vec['points']
             if not points: continue
             
-            color = (80, 120, 255) if vec['type'] == 'river' else (160, 82, 45)
+            color = COLOR_RIVER if vec['type'] == 'river' else COLOR_ROAD
             if active_vector and vec is active_vector:
                 color = (255, 255, 0)
 
@@ -165,15 +159,13 @@ class ImageMapStrategy:
 
 
     def set_light_direction(self, azimuth, altitude):
-        self.light_azimuth = azimuth
-        self.light_altitude = altitude
+        self.light_azimuth = azimuth; self.light_altitude = altitude
     
     def set_light_intensity(self, intensity):
         self.light_intensity = intensity
     
     def get_object_at(self, world_x, world_y, zoom):
-        px = int(world_x)
-        py = int(world_y)
+        px = int(world_x); py = int(world_y)
         if 0 <= px < self.width and 0 <= py < self.height:
             raw = self.heightmap[py, px]
             meters = self.real_min + (raw * (self.real_max - self.real_min))

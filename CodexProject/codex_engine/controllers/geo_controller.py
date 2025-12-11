@@ -1,3 +1,4 @@
+
 import pygame
 import math
 import json
@@ -11,14 +12,16 @@ from codex_engine.generators.world_gen import WorldGenerator
 from codex_engine.generators.local_gen import LocalGenerator 
 from codex_engine.generators.village_manager import VillageContentManager
 from codex_engine.core.ai_manager import AIManager
-from codex_engine.config import SCREEN_WIDTH, SCREEN_HEIGHT
+from codex_engine.config import SCREEN_WIDTH, SCREEN_HEIGHT, SIDEBAR_WIDTH
+
+COLOR_RIVER = (80, 120, 255)
+COLOR_ROAD = (160, 82, 45)
 
 class GeoController(BaseController):
     def __init__(self, db_manager, node_data, theme_manager):
         super().__init__(db_manager, node_data, theme_manager)
 
-        self.zoom_factor = 1.05 # Fast zoom for large maps
-        
+        self.zoom_factor = 1.05
         self.ai = AIManager()
         
         if self.node['type'] == 'world_map':
@@ -62,28 +65,32 @@ class GeoController(BaseController):
 
     def _init_ui(self):
         meta = self.node['metadata']
+        full_w = SIDEBAR_WIDTH - 40
+        half_w = (full_w // 2) - 5
         
         self.btn_back = Button(20, 50, 60, 25, "<- Up", self.font_ui, (80,80,90), (100,100,120), (255,255,255), self._go_up_level)
-        tab_y = 90
-        self.btn_tab_info   = Button(20, tab_y, 70, 30, "Info", self.font_ui, (60,60,70), (80,80,90), (255,255,255), lambda: self._set_tab("INFO"))
-        self.btn_tab_tools  = Button(95, tab_y, 70, 30, "Tools", self.font_ui, (60,60,70), (80,80,90), (255,255,255), lambda: self._set_tab("TOOLS"))
-        self.btn_tab_config = Button(170, tab_y, 70, 30, "Setup", self.font_ui, (60,60,70), (80,80,90), (255,255,255), lambda: self._set_tab("CONFIG"))
+        
+        tab_y = 90; tab_w = full_w // 3
+        self.btn_tab_info   = Button(20, tab_y, tab_w, 30, "Info", self.font_ui, (60,60,70), (80,80,90), (255,255,255), lambda: self._set_tab("INFO"))
+        self.btn_tab_tools  = Button(20+tab_w, tab_y, tab_w, 30, "Tools", self.font_ui, (60,60,70), (80,80,90), (255,255,255), lambda: self._set_tab("TOOLS"))
+        self.btn_tab_config = Button(20+(tab_w*2), tab_y, tab_w, 30, "Setup", self.font_ui, (60,60,70), (80,80,90), (255,255,255), lambda: self._set_tab("CONFIG"))
 
-        self.btn_new_road   = Button(20, 140, 105, 30, "+ Road", self.font_ui, (139,69,19), (160,82,45), (255,255,255), lambda: self.start_new_vector("road"))
-        self.btn_new_river  = Button(135, 140, 105, 30, "+ River", self.font_ui, (40,60,150), (60,80,180), (255,255,255), lambda: self.start_new_vector("river"))
-        self.btn_save_vec   = Button(20, 140, 220, 30, "Save Line", self.font_ui, (50,150,50), (80,200,80), (255,255,255), self.save_active_vector)
-        self.btn_cancel_vec = Button(20, 180, 105, 30, "Cancel", self.font_ui, (150,50,50), (200,80,80), (255,255,255), self.cancel_vector)
-        self.btn_delete_vec = Button(135, 180, 105, 30, "Delete", self.font_ui, (100,0,0), (150,0,0), (255,255,255), self.delete_vector)
+        self.btn_new_road   = Button(20, 140, half_w, 30, "+ Road", self.font_ui, (139,69,19), (160,82,45), (255,255,255), lambda: self.start_new_vector("road"))
+        self.btn_new_river  = Button(20+half_w+10, 140, half_w, 30, "+ River", self.font_ui, (40,60,150), (60,80,180), (255,255,255), lambda: self.start_new_vector("river"))
+        self.btn_save_vec   = Button(20, 140, full_w, 30, "Save Line", self.font_ui, (50,150,50), (80,200,80), (255,255,255), self.save_active_vector)
+        self.btn_cancel_vec = Button(20, 180, half_w, 30, "Cancel", self.font_ui, (150,50,50), (200,80,80), (255,255,255), self.cancel_vector)
+        self.btn_delete_vec = Button(20+half_w+10, 180, half_w, 30, "Delete", self.font_ui, (100,0,0), (150,0,0), (255,255,255), self.delete_vector)
 
-        self.slider_water = Slider(20, 140, 220, 15, -11000.0, 9000.0, meta.get('sea_level', 0.0), "Sea Level (m)")
-        self.slider_azimuth = Slider(20, 180, 220, 15, 0, 360, meta.get('light_azimuth', 315), "Light Dir")
-        self.slider_altitude = Slider(20, 220, 220, 15, 0, 90, meta.get('light_altitude', 45), "Light Height")
-        self.slider_intensity = Slider(20, 260, 220, 15, 0.0, 2.0, 1.2, "Light Power")
-        self.slider_contour = Slider(20, 300, 220, 15, 0, 500, meta.get('contour_interval', 0), "Contours (m)")
+        self.slider_water = Slider(20, 140, full_w, 15, -11000.0, 9000.0, meta.get('sea_level', 0.0), "Sea Level (m)")
+        self.slider_azimuth = Slider(20, 180, full_w, 15, 0, 360, meta.get('light_azimuth', 315), "Light Dir")
+        self.slider_altitude = Slider(20, 220, full_w, 15, 0, 90, meta.get('light_altitude', 45), "Light Height")
+        self.slider_intensity = Slider(20, 260, full_w, 15, 0.0, 2.0, 1.2, "Light Power")
+        self.slider_contour = Slider(20, 300, full_w, 15, 0, 500, meta.get('contour_interval', 0), "Contours (m)")
+        
         self.btn_grid_minus = Button(140, 340, 30, 30, "-", self.font_ui, (100,100,100), (150,150,150), (255,255,255), self.dec_grid)
         self.btn_grid_plus = Button(180, 340, 30, 30, "+", self.font_ui, (100,100,100), (150,150,150), (255,255,255), self.inc_grid)
-        self.btn_regen = Button(20, 380, 220, 30, "Regenerate Map", self.font_ui, (100, 100, 100), (150, 150, 150), (255,255,255), self.regenerate_seed)
-        self.btn_gen_details = Button(20, 420, 220, 30, "AI Gen Content", self.font_ui, (100, 100, 200), (150, 150, 250), (255,255,255), self._generate_ai_details)
+        self.btn_regen = Button(20, 380, full_w, 30, "Regenerate Map", self.font_ui, (100, 100, 100), (150, 150, 150), (255,255,255), self.regenerate_seed)
+        self.btn_gen_details = Button(20, 420, full_w, 30, "AI Gen Content", self.font_ui, (100, 100, 200), (150, 150, 250), (255,255,255), self._generate_ai_details)
 
     def _set_tab(self, tab_name): self.active_tab = tab_name
 
@@ -109,72 +116,159 @@ class GeoController(BaseController):
             self.render_strategy.set_light_direction(self.slider_azimuth.value, self.slider_altitude.value)
             self.render_strategy.set_light_intensity(self.slider_intensity.value)
 
-    def handle_input(self, event, cam_x, cam_y, zoom):
-        if self.context_menu:
-            if self.context_menu.handle_event(event):
-                self.context_menu = None
-            return None
 
+
+    def handle_input(self, event, cam_x, cam_y, zoom):
+        # Universal Input (Widgets, Context Menu, Global Keys)
+        if self.context_menu:
+            if self.context_menu.handle_event(event): self.context_menu = None
+            return None
         for widget in self.widgets:
             res = widget.handle_event(event)
             if res: return res if isinstance(res, dict) else None
         if self.active_tab == "INFO" and self.info_panel.handle_event(event): return None
+        if event.type == pygame.KEYDOWN and event.key == pygame.K_DELETE and self.selected_point_idx is not None:
+            if self.active_vector and 0 <= self.selected_point_idx < len(self.active_vector['points']):
+                del self.active_vector['points'][self.selected_point_idx]
+                self.selected_point_idx = None; return None
 
         center_x, center_y = SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2
         
-        if event.type == pygame.MOUSEBUTTONDOWN:
-            if event.button == 1 and event.pos[0] > 260:
-                self.drag_start_pos = event.pos
-                if self.hovered_marker:
-                    self.dragging_marker = self.hovered_marker
-                    world_x = ((event.pos[0] - center_x) / zoom) + cam_x
-                    world_y = ((event.pos[1] - center_y) / zoom) + cam_y
-                    self.drag_offset = (world_x - self.dragging_marker['world_x'], world_y - self.dragging_marker['world_y'])
-                else:
-                    self.dragging_map = True
-                    self.drag_start_cam = (cam_x, cam_y)
-            elif event.button == 3 and event.pos[0] > 260:
-                if self.hovered_marker:
-                    self.selected_marker = self.hovered_marker
-                    menu_options = [("Edit Details", self._open_edit_modal), ("Delete Marker", self._delete_selected_marker), ("Center View", self._center_on_selected_marker)]
-                    self.context_menu = ContextMenu(event.pos[0], event.pos[1], menu_options, self.font_ui)
-
-        elif event.type == pygame.MOUSEBUTTONUP and event.button == 1:
-            drag_dist = math.hypot(event.pos[0] - self.drag_start_pos[0], event.pos[1] - self.drag_start_pos[1])
-            if self.dragging_marker:
-                self.db.update_marker(self.dragging_marker['id'], world_x=self.dragging_marker['world_x'], world_y=self.dragging_marker['world_y'])
-                if drag_dist < 5:
-                    result = {"action": "enter_marker", "marker": self.dragging_marker}
-                    self.dragging_marker = None
-                    return result
-                self.dragging_marker = None
-            elif self.dragging_map:
-                self.dragging_map = False
-                if drag_dist < 5 and (pygame.key.get_mods() & pygame.KMOD_SHIFT):
-                    world_x = ((event.pos[0] - center_x) / zoom) + cam_x
-                    world_y = ((event.pos[1] - center_y) / zoom) + cam_y
-                    return self._create_new_marker(world_x, world_y)
-
-        elif event.type == pygame.MOUSEMOTION:
+        # MOUSE MOTION
+        if event.type == pygame.MOUSEMOTION:
             world_x = ((event.pos[0] - center_x) / zoom) + cam_x
             world_y = ((event.pos[1] - center_y) / zoom) + cam_y
+            if self.dragging_point and self.selected_point_idx is not None:
+                self.active_vector['points'][self.selected_point_idx] = [world_x, world_y]; return None
             if self.dragging_marker:
                 self.dragging_marker['world_x'] = world_x - self.drag_offset[0]
-                self.dragging_marker['world_y'] = world_y - self.drag_offset[1]
-            elif self.dragging_map:
-                dx = event.pos[0] - self.drag_start_pos[0]
-                dy = event.pos[1] - self.drag_start_pos[1]
+                self.dragging_marker['world_y'] = world_y - self.drag_offset[1]; return None
+            if self.dragging_map:
+                dx = event.pos[0] - self.drag_start_pos[0]; dy = event.pos[1] - self.drag_start_pos[1]
                 return {"action": "pan", "pos": (self.drag_start_cam[0] - dx / zoom, self.drag_start_cam[1] - dy / zoom)}
-        return None
 
+        # MOUSE DOWN
+        if event.type == pygame.MOUSEBUTTONDOWN:
+            if event.pos[0] < SIDEBAR_WIDTH: return None
+            print(f"\n--- GEO: MOUSE DOWN at {event.pos} ---")
+            print(f"  [State] Active Tab: {self.active_tab}, Hovered Marker: {self.hovered_marker['title'] if self.hovered_marker else 'None'}")
+            world_x = ((event.pos[0] - center_x) / zoom) + cam_x
+            world_y = ((event.pos[1] - center_y) / zoom) + cam_y
+
+            if event.button == 1: # Left Click
+                self.drag_start_pos = event.pos; self.drag_start_cam = (cam_x, cam_y)
+                
+                if self.active_vector:
+                    print("  [Action] Vector editing in progress. Handling vector click.")
+                    self._handle_vector_click(event, world_x, world_y, zoom)
+                    return
+                
+                if self.hovered_marker:
+                    print(f"  [Action] Clicked on hovered marker '{self.hovered_marker['title']}'.")
+                    if self.active_tab == "TOOLS":
+                        print("    -> In TOOLS tab. Starting marker drag.")
+                        self.dragging_marker = self.hovered_marker
+                        self.drag_offset = (world_x - self.hovered_marker['world_x'], world_y - self.hovered_marker['world_y'])
+                    else:
+                        print("    -> Not in TOOLS tab. Selecting marker for potential entry on mouse up.")
+                    self.selected_marker = self.hovered_marker
+                    return
+
+                if self.active_tab == "TOOLS":
+                    print("  [Action] In TOOLS tab, checking for vector pixel selection...")
+                    if self._handle_pixel_selection(event, world_x, world_y, zoom):
+                        return
+                
+                if pygame.key.get_mods() & pygame.KMOD_SHIFT:
+                    print("  [Action] Shift key down. Creating new marker.")
+                    self._create_new_marker(world_x, world_y)
+                    return
+                
+                print("  [Action] Fallback: Starting map pan.")
+                self.dragging_map = True
+
+            elif event.button == 3: # Right Click
+                self._open_context_menu(event)
+
+        # MOUSE UP
+        if event.type == pygame.MOUSEBUTTONUP and event.button == 1:
+            drag_dist = math.hypot(event.pos[0] - self.drag_start_pos[0], event.pos[1] - self.drag_start_pos[1])
+
+            if self.dragging_marker:
+                print("\n--- GEO: MOUSE UP (DRAG END) ---")
+                marker_being_dragged = self.dragging_marker
+                print(f"  [1] Marker '{marker_being_dragged['title']}' drag ended. Dist: {drag_dist:.1f}")
+
+                self.db.update_marker(marker_being_dragged['id'], world_x=marker_being_dragged['world_x'], world_y=marker_being_dragged['world_y'])
+                self.markers = self.db.get_markers(self.node['id'])
+                
+                marker_being_dragged = self.dragging_marker
+                is_view_marker = marker_being_dragged.get('metadata', {}).get('is_view_marker', False)
+                is_active = marker_being_dragged.get('metadata', {}).get('is_active', False)
+                print(f"  [2] Checking if moved marker is active view... is_view={is_view_marker}, is_active={is_active}")
+                #if is_view_marker and is_active:
+                if is_view_marker and is_active:
+                    print("  [3] Action: Is active view marker. Returning 'update_player_view'.")
+                    self.dragging_marker = None
+                    return {"action": "update_player_view"}
+            
+            if self.hovered_marker and drag_dist < 5:
+                print("\n--- GEO: MOUSE UP (SHORT CLICK) ---")
+                print(f"  [1] Detected short click on '{self.hovered_marker['title']}'.")
+                fresh_marker = next((m for m in self.markers if m['id'] == self.hovered_marker['id']), self.hovered_marker)
+                print("  [2] Action: Returning 'enter_marker'.")
+                return {"action": "enter_marker", "marker": fresh_marker}
+
+            self.dragging_map = False
+            self.dragging_point = False
+            self.dragging_marker = None
+        
+        return None
+        
     def _go_up_level(self): return {"action": "go_up_level"}
+    def _open_context_menu(self, event):
+        if self.hovered_marker:
+            self.selected_marker = self.hovered_marker
+            menu_options = [("Edit Details", self._open_edit_modal), ("", None), ("Delete Marker", self._delete_selected_marker), ("Center View", self._center_on_selected_marker)]
+            self.context_menu = ContextMenu(event.pos[0], event.pos[1], menu_options, self.font_ui)
+    
+    def _handle_vector_click(self, event, wx, wy, zoom):
+        center_x, center_y = SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2
+        for i, pt in enumerate(self.active_vector['points']):
+            sx, sy = center_x + (pt[0] - wx) * zoom, center_y + (pt[1] - wy) * zoom
+            if math.hypot(sx - event.pos[0], sy - event.pos[1]) < 10:
+                self.selected_point_idx, self.dragging_point = i, True
+                return
+        self.active_vector['points'].append([wx, wy])
+        self.selected_point_idx = len(self.active_vector['points']) - 1
+        self.dragging_point = True
+
+    def _handle_pixel_selection(self, event, world_x, world_y, zoom):
+        try:
+            pixel = pygame.display.get_surface().get_at(event.pos)[:3]
+            target_type = None
+            if pixel == COLOR_ROAD: target_type = "road"
+            elif pixel == COLOR_RIVER: target_type = "river"
+            if target_type:
+                closest, min_d = None, float('inf')
+                for vec in self.vectors:
+                    if vec['type'] != target_type: continue
+                    for pt in vec['points']:
+                        d = math.hypot(pt[0]-world_x, pt[1]-world_y)
+                        if d < min_d: min_d, closest = d, vec
+                if closest and min_d < (150 / zoom): 
+                    self.active_vector = closest
+                    self.selected_marker = None
+                    return True
+        except IndexError: pass
+        return False
+
     def inc_grid(self): self.grid_size = min(256, self.grid_size + 8)
     def dec_grid(self): self.grid_size = max(16, self.grid_size - 8)
 
     def regenerate_seed(self):
         if self.node['type'] == 'world_map':
-            gen = WorldGenerator(self.theme, self.db)
-            gen.generate_world_node(self.node['campaign_id'])
+            gen = WorldGenerator(self.theme, self.db); gen.generate_world_node(self.node['campaign_id'])
             return {"action": "reload_node"}
 
     def start_new_vector(self, vtype): self.active_vector = {'points': [], 'type': vtype, 'width': 4 if vtype=='road' else 8, 'id': None}
@@ -183,7 +277,8 @@ class GeoController(BaseController):
         self.active_vector = None
     def cancel_vector(self): self.active_vector = None
     def delete_vector(self):
-        if self.active_vector and self.active_vector.get('id'): self.db.delete_vector(self.active_vector['id']); self.vectors = self.db.get_vectors(self.node['id'])
+        if self.active_vector and self.active_vector.get('id'):
+            self.db.delete_vector(self.active_vector['id']); self.vectors = self.db.get_vectors(self.node['id'])
         self.active_vector = None
 
     def _open_edit_modal(self):
@@ -223,77 +318,28 @@ class GeoController(BaseController):
     def draw_overlays(self, screen, cam_x, cam_y, zoom):
         self._draw_markers(screen, cam_x, cam_y, zoom)
         if self.active_tab == "INFO": self.info_panel.draw(screen)
-        # _old  Removed diplay of description panel
-        #if self.selected_marker and not self.dragging_marker and not self.context_menu:
-        #     self._draw_marker_panel(screen)
         if self.hovered_marker and not self.dragging_marker and not self.context_menu:
              self._draw_tooltip(screen, pygame.mouse.get_pos())
         if self.context_menu:
             self.context_menu.draw(screen)
 
-    def _draw_wrapped_text(self, surface, text, font, color, rect):
-        """NEW: Helper function to draw word-wrapped text."""
-        words = text.split(' ')
-        lines = []
-        current_line = ""
-        for word in words:
-            if font.size(current_line + " " + word)[0] < rect.width:
-                current_line += " " + word
-            else:
-                lines.append(current_line.strip())
-                current_line = word
-        lines.append(current_line.strip())
-        
-        y_offset = 0
-        for line in lines:
-            if y_offset + font.get_height() > rect.height: break
-            line_surf = font.render(line, True, color)
-            surface.blit(line_surf, (rect.x, rect.y + y_offset))
-            y_offset += font.get_height()
-
-    def _draw_marker_panel(self, screen):
-        panel_y = SCREEN_HEIGHT - 160
-        pygame.draw.rect(screen, (40,40,50), (10,panel_y,240,150), border_radius=5)
-        pygame.draw.rect(screen, (150,150,150), (10,panel_y,240,150), 1, border_radius=5)
-        title_s = self.font_ui.render(self.selected_marker['title'], True, (255,255,100))
-        screen.blit(title_s, (20, panel_y+10))
-        
-        # MODIFIED: Use the new wrapped text drawer
-        desc_rect = pygame.Rect(20, panel_y+45, 220, 100)
-        self._draw_wrapped_text(screen, self.selected_marker.get('description', ''), self.font_ui, (200,200,200), desc_rect)
-
     def _draw_tooltip(self, screen, pos):
-        """RESTORED: Draws a tooltip with wrapped text for the hovered marker."""
-        m = self.hovered_marker
-        text = m.get('description', 'No details.')
-        
-        # Calculate size needed for wrapped text
-        max_width = 300
-        words = text.split(' ')
-        lines = []
-        current_line = ""
-        for word in words:
-            if self.font_ui.size(current_line + " " + word)[0] < max_width:
-                current_line += " " + word
-            else:
-                lines.append(current_line.strip())
-                current_line = word
-        lines.append(current_line.strip())
-        
-        # Determine background rect size
+        m = self.hovered_marker; text = m.get('description', 'No details.')
+        import textwrap
+        wrapped_lines = textwrap.wrap(text, width=40)
         line_height = self.font_ui.get_height()
-        bg_h = len(lines) * line_height + 10
-        bg_w = max(self.font_ui.size(line)[0] for line in lines) + 20 if lines else 100
-        
-        # Position the tooltip
+        bg_h = len(wrapped_lines) * line_height + 10
+        bg_w = max(self.font_ui.size(line)[0] for line in wrapped_lines) + 20 if wrapped_lines else 100
         bg_rect = pygame.Rect(pos[0] + 15, pos[1] + 15, bg_w, bg_h)
         if bg_rect.right > SCREEN_WIDTH: bg_rect.right = pos[0] - 15
         if bg_rect.bottom > SCREEN_HEIGHT: bg_rect.bottom = pos[1] - 15
-
-        # Draw
         pygame.draw.rect(screen, (20, 20, 30, 220), bg_rect)
         pygame.draw.rect(screen, (100, 100, 150), bg_rect, 1)
-        self._draw_wrapped_text(screen, text, self.font_ui, (200,200,200), bg_rect.inflate(-20, -10))
+        y_off = 5
+        for line in wrapped_lines:
+            line_surf = self.font_ui.render(line, True, (200,200,200))
+            screen.blit(line_surf, (bg_rect.x + 10, bg_rect.y + y_off))
+            y_off += line_height
 
     def _draw_hex_grid(self, screen, start_x, start_y, zoom, sw, sh):
         hex_radius = self.grid_size * zoom;
@@ -342,7 +388,57 @@ class GeoController(BaseController):
             pygame.draw.rect(screen, (0,0,0,150), t_rect.inflate(4, 2))
             screen.blit(title_surf, t_rect)
 
+
+    def render_player_view_surface(self):
+        print(f"  [2] Inside {self.__class__.__name__}.render_player_view_surface()...")
+        view_marker = next((m for m in self.markers if m.get('metadata', {}).get('is_view_marker') and m['metadata'].get('is_active')), None)
+        
+        if not view_marker:
+            print("  [3] No ACTIVE view marker found in this controller. Returning None.")
+            return None
+        
+        if not self.render_strategy: # or self.render_strategy for geo
+            print("  [3] Renderer not available. Returning None.")
+            return None
+
+        print(f"  [3] Found active view marker '{view_marker['title']}'. Preparing to render from its perspective.")
+        temp_surface = pygame.Surface((1920, 1080))
+        
+                # --- ADD THIS DRAW CALL ---
+        self.render_strategy.draw(
+            temp_surface, 
+            view_marker['world_x'], 
+            view_marker['world_y'], 
+            view_marker['metadata'].get('zoom', 1.5),
+            temp_surface.get_width(),
+            temp_surface.get_height(),
+            self.slider_water.value, # Use current slider value
+            self.vectors
+        )
+        
+        return temp_surface
+
+    def render_player_view_surface_old(self):
+        view_marker = next((m for m in self.markers if m.get('metadata', {}).get('is_view_marker') and m['metadata'].get('is_active')), None)
+        if not view_marker or not self.render_strategy:
+            return None
+
+        temp_surface = pygame.Surface((1920, 1080))
+        
+        self.render_strategy.draw(
+            temp_surface, 
+            view_marker['world_x'], 
+            view_marker['world_y'], 
+            view_marker['metadata'].get('zoom', 1.5),
+            temp_surface.get_width(),
+            temp_surface.get_height(),
+            self.get_metadata_updates().get('sea_level', 0), # Pass current settings
+            self.vectors
+        )
+        return temp_surface
+
     def get_metadata_updates(self):
         return {'sea_level': self.slider_water.value, 'light_azimuth': self.slider_azimuth.value, 'light_altitude': self.slider_altitude.value, 'contour_interval': self.slider_contour.value, 'grid_size': self.grid_size}
 
     def cleanup(self): pass
+

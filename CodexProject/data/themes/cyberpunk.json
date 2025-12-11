@@ -1,0 +1,31 @@
+{
+    "colors": {
+        "background": [
+            20,
+            15,
+            30
+        ],
+        "ink": [
+            0,
+            255,
+            255
+        ],
+        "accent": [
+            255,
+            0,
+            150
+        ]
+    },
+    "vocabulary": {
+        "inn": "Noodle Bar",
+        "police": "CorpSec",
+        "magic": "Netrunning"
+    },
+    "generation_rules": {
+        "world": {
+            "generator": "city"
+        },
+        "tactical_style": "blueprint"
+    },
+    "ai_prompt_prefix": "You are a cyberpunk AI. Your style is like William Gibson. Focus on chrome, neon, corporate espionage, and body modification..."
+}

@@ -1,7 +1,7 @@
 import pygame
 from codex_engine.ui.widgets import Button
 from codex_engine.ui.editors import NativeMarkerEditor
-from codex_engine.config import SCREEN_HEIGHT
+from codex_engine.config import SCREEN_HEIGHT, SIDEBAR_WIDTH
 
 class InfoPanel:
     def __init__(self, content_manager, db_manager, node_data, font_ui, font_small):
@@ -17,16 +17,21 @@ class InfoPanel:
         # SCROLL STATE
         self.scroll_y = 0
         self.max_scroll = 0
-        self.view_rect = pygame.Rect(10, 180, 240, SCREEN_HEIGHT - 280) # Visible text area
+        
+        # Calculate view rect based on new sidebar width
+        # Width: Sidebar (320) - Margin (10) - Margin (20) = 290 approx
+        view_w = SIDEBAR_WIDTH - 30 
+        self.view_rect = pygame.Rect(10, 180, view_w, SCREEN_HEIGHT - 280)
         
         # Scrollbar interaction
-        self.scrollbar_rect = pygame.Rect(250, 180, 5, 100)  # Will be updated in draw()
+        self.scrollbar_rect = pygame.Rect(SIDEBAR_WIDTH - 15, 180, 5, 100)
         self.dragging_scrollbar = False
         self.drag_start_y = 0
         self.drag_start_scroll = 0
 
     def _init_ui(self):
-        self.btn_edit_node = Button(20, 140, 220, 30, "Edit Map Details", self.font_ui, (100, 100, 150), (120, 120, 180), (255,255,255), self._edit_current_node)
+        btn_w = SIDEBAR_WIDTH - 40
+        self.btn_edit_node = Button(20, 140, btn_w, 30, "Edit Map Details", self.font_ui, (100, 100, 150), (120, 120, 180), (255,255,255), self._edit_current_node)
         self.widgets.append(self.btn_edit_node)
 
     def handle_event(self, event):
@@ -34,12 +39,12 @@ class InfoPanel:
         mx, my = pygame.mouse.get_pos()
         
         # Only handle events if mouse is over the sidebar
-        if mx >= 260:
+        if mx >= SIDEBAR_WIDTH:
             return False
         
         # Mouse wheel scrolling
         if event.type == pygame.MOUSEWHEEL:
-            if mx < 260:
+            if mx < SIDEBAR_WIDTH:
                 self.scroll_y -= event.y * 20
                 self.scroll_y = max(0, min(self.scroll_y, self.max_scroll))
                 return True
@@ -78,7 +83,7 @@ class InfoPanel:
                 self.drag_start_scroll = self.scroll_y
                 return True
             # Click in scroll track (above or below bar)
-            elif mx >= 250 and mx <= 255 and self.view_rect.top <= my <= self.view_rect.bottom:
+            elif mx >= (SIDEBAR_WIDTH - 20) and mx <= SIDEBAR_WIDTH and self.view_rect.top <= my <= self.view_rect.bottom:
                 if self.max_scroll > 0:
                     # Calculate where in the track we clicked
                     relative_y = my - self.view_rect.top
@@ -164,11 +169,13 @@ class InfoPanel:
             bar_h = max(20, self.view_rect.height * (self.view_rect.height / total_h))
             bar_y = self.view_rect.y + (self.scroll_y / self.max_scroll) * (self.view_rect.height - bar_h)
             
+            scroll_x = SIDEBAR_WIDTH - 15
+            
             # Update scrollbar rect for collision detection
-            self.scrollbar_rect = pygame.Rect(250, bar_y, 5, bar_h)
+            self.scrollbar_rect = pygame.Rect(scroll_x, bar_y, 5, bar_h)
             
             # Draw scrollbar track
-            pygame.draw.rect(screen, (50, 50, 50), (250, self.view_rect.top, 5, self.view_rect.height))
+            pygame.draw.rect(screen, (50, 50, 50), (scroll_x, self.view_rect.top, 5, self.view_rect.height))
             
             # Draw scrollbar thumb
             bar_color = (150, 150, 150) if self.dragging_scrollbar else (100, 100, 100)
@@ -203,3 +210,4 @@ class InfoPanel:
 
     def _handle_ai_gen_modal(self, mtype, title, context):
         return {}
+

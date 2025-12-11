@@ -1,0 +1,33 @@
+{
+    "colors": {
+        "background": [
+            210,
+            180,
+            140
+        ],
+        "ink": [
+            80,
+            50,
+            20
+        ],
+        "accent": [
+            0,
+            150,
+            150
+        ]
+    },
+    "vocabulary": {
+        "inn": "Saloon",
+        "town": "Boomtown",
+        "magic": "Hexes"
+    },
+    "generation_rules": {
+        "world": {
+            "terrain_type": "desert"
+        },
+        "dungeon": {
+            "name_override": "Mine Shaft"
+        }
+    },
+    "ai_prompt_prefix": "You are a Weird West storyteller. Mix classic cowboy tropes with supernatural horror and occult magic..."
+}

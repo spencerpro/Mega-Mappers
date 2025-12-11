@@ -1,0 +1,33 @@
+{
+    "colors": {
+        "background": [
+            40,
+            40,
+            50
+        ],
+        "ink": [
+            200,
+            200,
+            200
+        ],
+        "accent": [
+            180,
+            0,
+            0
+        ]
+    },
+    "vocabulary": {
+        "inn": "Coaching Inn",
+        "dungeon": "Castle Crypt",
+        "monster": "Creature"
+    },
+    "generation_rules": {
+        "world": {
+            "light_altitude": 20
+        },
+        "dungeon": {
+            "algorithm": "rooms_and_corridors"
+        }
+    },
+    "ai_prompt_prefix": "You are a gothic horror writer in the style of Bram Stoker or Mary Shelley. Emphasize crumbling castles, dark forests, ancient curses, and dramatic tragedy..."
+}

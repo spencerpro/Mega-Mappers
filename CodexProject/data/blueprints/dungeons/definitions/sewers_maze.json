@@ -1,0 +1,12 @@
+{
+  "id": "sewers_maze",
+  "type": "dungeon_definition",
+  "name": "City Sewers",
+  "generator_config": {
+    "algorithm": "maze",
+    "room_count": 8,
+    "min_room_size": 6,
+    "max_room_size": 10,
+    "corridor_width": 2
+  }
+}

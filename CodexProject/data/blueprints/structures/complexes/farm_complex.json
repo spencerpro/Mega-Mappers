@@ -1,0 +1,512 @@
+{
+  "id": "farm_complex",
+  "type": "compound",
+  "name": "Prosperous Farm",
+  "plot_size": {
+    "width": {
+      "min": 50,
+      "max": 60
+    },
+    "height": {
+      "min": 50,
+      "max": 60
+    }
+  },
+  "components": [
+    {
+      "blueprint_id": "house_medium",
+      "offset": {
+        "x": 20,
+        "y": 20
+      },
+      "connections": [
+        {
+          "entry_key": "main_door"
+        },
+        {
+          "entry_key": "cellar_hatch"
+        }
+      ]
+    },
+    {
+      "blueprint_id": "stable_long",
+      "offset": {
+        "x": 5,
+        "y": 25
+      },
+      "connections": [
+        {
+          "entry_key": "wide_door"
+        }
+      ]
+    },
+    {
+      "blueprint_id": "shed_small",
+      "offset": {
+        "x": 35,
+        "y": 5
+      },
+      "connections": [
+        {
+          "entry_key": "door"
+        }
+      ]
+    }
+  ]
+}
+
+---  START OF FILE CodexProject/data/blueprints/structures/compounds/homestead_basic.json ---
+
+{
+  "id": "homestead_basic",
+  "type": "compound",
+  "name": "Basic Homestead",
+  "plot_size": {
+    "width": {
+      "min": 35,
+      "max": 45
+    },
+    "height": {
+      "min": 35,
+      "max": 45
+    }
+  },
+  "components": [
+    {
+      "blueprint_id": "cottage_small",
+      "offset": {
+        "x": 15,
+        "y": 10
+      },
+      "connections": [
+        {
+          "entry_key": "front_door"
+        }
+      ]
+    },
+    {
+      "blueprint_id": "outhouse",
+      "offset": {
+        "x": 30,
+        "y": 5
+      },
+      "connections": [
+        {
+          "entry_key": "door"
+        }
+      ]
+    }
+  ]
+}
+
+---  START OF FILE CodexProject/data/blueprints/structures/compounds/church_grounds.json ---
+
+{
+  "id": "church_grounds",
+  "type": "compound",
+  "name": "Parish Grounds",
+  "plot_size": {
+    "width": 40,
+    "height": 60
+  },
+  "components": [
+    {
+      "blueprint_id": "chapel_stone",
+      "offset": {
+        "x": 10,
+        "y": 15
+      },
+      "connections": [
+        {
+          "entry_key": "double_doors"
+        }
+      ]
+    },
+    {
+      "blueprint_id": "cottage_small",
+      "offset": {
+        "x": 25,
+        "y": 45
+      },
+      "connections": [
+        {
+          "entry_key": "front_door"
+        }
+      ]
+    }
+  ]
+}
+
+---  START OF FILE CodexProject/data/blueprints/structures/compounds/adventurer_camp.json ---
+
+{
+  "id": "adventurer_camp",
+  "type": "compound",
+  "name": "Traveler's Camp",
+  "plot_size": {
+    "width": 30,
+    "height": 30
+  },
+  "components": [
+    {
+      "blueprint_id": "tent_canvas",
+      "offset": {
+        "x": 5,
+        "y": 5
+      },
+      "connections": [
+        {
+          "entry_key": "flap"
+        }
+      ]
+    },
+    {
+      "blueprint_id": "tent_canvas",
+      "offset": {
+        "x": 18,
+        "y": 5
+      },
+      "connections": [
+        {
+          "entry_key": "flap"
+        }
+      ]
+    },
+    {
+      "blueprint_id": "tent_canvas",
+      "offset": {
+        "x": 12,
+        "y": 18
+      },
+      "connections": [
+        {
+          "entry_key": "flap"
+        }
+      ]
+    }
+  ]
+}
+
+---  START OF FILE CodexProject/data/blueprints/structures/singles/chapel_stone.json ---
+
+{
+  "id": "chapel_stone",
+  "type": "structure",
+  "name": "Stone Chapel",
+  "dimensions": {
+    "width": {
+      "min": 14,
+      "max": 18
+    },
+    "height": {
+      "min": 20,
+      "max": 25
+    }
+  },
+  "floors": [
+    {
+      "id": "nave",
+      "level": 0,
+      "name": "Nave"
+    },
+    {
+      "id": "crypt",
+      "level": -1,
+      "name": "Undercroft"
+    }
+  ],
+  "internal_links": [
+    {
+      "from": "nave",
+      "to": "crypt",
+      "type": "stairs"
+    }
+  ],
+  "external_entries": [
+    {
+      "key": "double_doors",
+      "floor_id": "nave",
+      "wall": "south",
+      "align": "center"
+    }
+  ]
+}
+
+---  START OF FILE CodexProject/data/blueprints/structures/singles/stable_long.json ---
+
+{
+  "id": "stable_long",
+  "type": "structure",
+  "name": "Stables",
+  "dimensions": {
+    "width": {
+      "min": 15,
+      "max": 20
+    },
+    "height": {
+      "min": 8,
+      "max": 10
+    }
+  },
+  "floors": [
+    {
+      "id": "ground",
+      "level": 0,
+      "name": "Stalls"
+    }
+  ],
+  "external_entries": [
+    {
+      "key": "wide_door",
+      "floor_id": "ground",
+      "wall": "west",
+      "align": "center"
+    }
+  ]
+}
+
+---  START OF FILE CodexProject/data/blueprints/structures/singles/outhouse.json ---
+
+{
+  "id": "outhouse",
+  "type": "structure",
+  "name": "Outhouse",
+  "dimensions": {
+    "width": 4,
+    "height": 4
+  },
+  "floors": [
+    {
+      "id": "ground",
+      "level": 0,
+      "name": "Interior"
+    }
+  ],
+  "external_entries": [
+    {
+      "key": "door",
+      "floor_id": "ground",
+      "wall": "south",
+      "align": "center"
+    }
+  ]
+}
+
+---  START OF FILE CodexProject/data/blueprints/structures/singles/tent_canvas.json ---
+
+{
+  "id": "tent_canvas",
+  "type": "structure",
+  "name": "Canvas Tent",
+  "dimensions": {
+    "width": 6,
+    "height": 6
+  },
+  "floors": [
+    {
+      "id": "ground",
+      "level": 0,
+      "name": "Interior"
+    }
+  ],
+  "external_entries": [
+    {
+      "key": "flap",
+      "floor_id": "ground",
+      "wall": "south",
+      "align": "center"
+    }
+  ]
+}
+
+---  START OF FILE CodexProject/data/blueprints/structures/singles/house_medium.json ---
+
+{
+  "id": "house_medium",
+  "type": "structure",
+  "name": "Timber House (2 Story)",
+  "dimensions": {
+    "width": {
+      "min": 12,
+      "max": 16
+    },
+    "height": {
+      "min": 10,
+      "max": 14
+    }
+  },
+  "floors": [
+    {
+      "id": "cellar",
+      "level": -1,
+      "name": "Root Cellar"
+    },
+    {
+      "id": "ground",
+      "level": 0,
+      "name": "Common Room"
+    },
+    {
+      "id": "upper",
+      "level": 1,
+      "name": "Bedrooms"
+    }
+  ],
+  "internal_links": [
+    {
+      "from": "ground",
+      "to": "upper",
+      "type": "stairs"
+    },
+    {
+      "from": "ground",
+      "to": "cellar",
+      "type": "ladder"
+    }
+  ],
+  "external_entries": [
+    {
+      "key": "main_door",
+      "floor_id": "ground",
+      "wall": "south",
+      "align": "center"
+    },
+    {
+      "key": "side_door",
+      "floor_id": "ground",
+      "wall": "east",
+      "align": 2
+    },
+    {
+      "key": "cellar_hatch",
+      "floor_id": "cellar",
+      "wall": "north",
+      "align": 2
+    }
+  ]
+}
+
+---  START OF FILE CodexProject/data/blueprints/structures/singles/shed_small.json ---
+
+{
+  "id": "shed_small",
+  "type": "structure",
+  "name": "Tool Shed",
+  "dimensions": {
+    "width": {
+      "min": 6,
+      "max": 8
+    },
+    "height": {
+      "min": 5,
+      "max": 7
+    }
+  },
+  "floors": [
+    {
+      "id": "ground",
+      "level": 0,
+      "name": "Interior"
+    }
+  ],
+  "external_entries": [
+    {
+      "key": "door",
+      "floor_id": "ground",
+      "wall": "south",
+      "align": 2
+    }
+  ]
+}
+
+---  START OF FILE CodexProject/data/blueprints/structures/singles/cottage_small.json ---
+
+{
+  "id": "cottage_small",
+  "type": "structure",
+  "name": "Small Cottage",
+  "dimensions": {
+    "width": {
+      "min": 10,
+      "max": 12
+    },
+    "height": {
+      "min": 8,
+      "max": 10
+    }
+  },
+  "floors": [
+    {
+      "id": "ground",
+      "level": 0,
+      "name": "Living Area"
+    }
+  ],
+  "external_entries": [
+    {
+      "key": "front_door",
+      "floor_id": "ground",
+      "wall": "south",
+      "align": "center"
+    }
+  ]
+}
+
+---  START OF FILE CodexProject/data/blueprints/dungeons/definitions/crypt_standard.json ---
+
+{
+  "id": "crypt_standard",
+  "type": "dungeon_definition",
+  "name": "Standard Crypt Layout",
+  "generator_config": {
+    "algorithm": "rooms_and_corridors",
+    "room_count": 12,
+    "min_room_size": 4,
+    "max_room_size": 8,
+    "corridor_width": 1
+  }
+}
+
+---  START OF FILE CodexProject/data/blueprints/dungeons/definitions/cavern_deep.json ---
+
+{
+  "id": "cavern_deep",
+  "type": "dungeon_definition",
+  "name": "Deep Caverns",
+  "generator_config": {
+    "algorithm": "rooms_and_corridors",
+    "room_count": 20,
+    "min_room_size": 10,
+    "max_room_size": 20,
+    "corridor_width": 2
+  }
+}
+
+---  START OF FILE CodexProject/data/blueprints/dungeons/complexes/ancient_crypt.json ---
+
+{
+  "id": "ancient_crypt",
+  "type": "dungeon_complex",
+  "name": "Ancient Crypt",
+  "description": "A three-level tomb that gets older and darker as you descend.",
+  "levels": [
+    {
+      "depth": 1,
+      "blueprint_id": "crypt_standard", 
+      "name_override": "The Upper Tombs",
+      "theme_override": "stone_brick"
+    },
+    {
+      "depth": 2,
+      "blueprint_id": "crypt_standard",
+      "name_override": "The Lower Tombs",
+      "theme_override": "cracked_stone"
+    },
+    {
+      "depth": 3,
+      "blueprint_id": "cavern_deep",
+      "name_override": "The Root Caverns",
+      "theme_override": "natural_rock"
+    }
+  ]
+}

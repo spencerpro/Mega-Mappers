@@ -1,0 +1,17 @@
+{
+  "id": "thieves_guild",
+  "type": "dungeon_complex",
+  "name": "Thieves' Guild (Sewer Access)",
+  "levels": [
+    {
+      "depth": 1,
+      "blueprint_id": "sewers_maze",
+      "name_override": "Sewer Entrance"
+    },
+    {
+      "depth": 2,
+      "blueprint_id": "crypt_standard",
+      "name_override": "The Guild Hall"
+    }
+  ]
+}

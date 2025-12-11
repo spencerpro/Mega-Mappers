@@ -1,0 +1,33 @@
+{
+    "colors": {
+        "background": [
+            10,
+            10,
+            10
+        ],
+        "ink": [
+            250,
+            250,
+            250
+        ],
+        "accent": [
+            220,
+            30,
+            30
+        ]
+    },
+    "vocabulary": {
+        "inn": "Nightclub",
+        "police": "The Feds",
+        "dungeon": "Warehouse"
+    },
+    "generation_rules": {
+        "world": {
+            "generator": "city"
+        },
+        "dungeon": {
+            "algorithm": "single_room"
+        }
+    },
+    "ai_prompt_prefix": "You are a hard-boiled detective fiction writer in the style of Raymond Chandler..."
+}

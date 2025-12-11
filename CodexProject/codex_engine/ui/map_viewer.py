@@ -1,5 +1,5 @@
 import pygame
-from codex_engine.config import SCREEN_WIDTH, SCREEN_HEIGHT
+from codex_engine.config import SCREEN_WIDTH, SCREEN_HEIGHT, SIDEBAR_WIDTH
 from codex_engine.core.db_manager import DBManager
 from codex_engine.controllers.geo_controller import GeoController
 from codex_engine.controllers.tactical_controller import TacticalController
@@ -28,34 +28,72 @@ class MapViewer:
         geo = node_data.get('geometry_data', {})
         node_type = node_data.get('type', 'world_map')
         
-        if node_type in ['dungeon_level', 'building_interior', 'tactical_map']:
+        # Dispatch controller
+        if node_type in ['dungeon_level', 'building_interior', 'tactical_map', 'compound', 'dungeon_complex']:
             self.controller = TacticalController(self.db, node_data, self.theme)
-            if 'cam_x' in metadata:
-                self.cam_x, self.cam_y = metadata['cam_x'], metadata['cam_y']
-                self.zoom = metadata.get('zoom', 1.0)
-            else:
-                self.cam_x = geo.get('width', 30) / 2
-                self.cam_y = geo.get('height', 30) / 2
-                self.zoom = 1.0
         else:
             self.controller = GeoController(self.db, node_data, self.theme)
-            if 'cam_x' in metadata:
-                self.cam_x, self.cam_y = metadata['cam_x'], metadata['cam_y']
-                self.zoom = metadata.get('zoom', 1.0)
-            else:
-                self.cam_x, self.cam_y, self.zoom = 0, 0, 1.0
+
+        # Restore Camera or set default
+        if 'cam_x' in metadata:
+            self.cam_x, self.cam_y = metadata['cam_x'], metadata['cam_y']
+            self.zoom = metadata.get('zoom', 1.0)
+        elif node_type in ['dungeon_level', 'building_interior', 'tactical_map', 'compound', 'dungeon_complex']:
+            self.cam_x = geo.get('width', 30) / 2
+            self.cam_y = geo.get('height', 30) / 2
+            self.zoom = 1.0
+        else:
+            # Default for geo maps
+            map_w = metadata.get('width', SCREEN_WIDTH)
+            map_h = metadata.get('height', SCREEN_HEIGHT)
+            self.cam_x, self.cam_y = map_w / 2, map_h / 2
+            self.zoom = 1.0
+            
+        # --- PHASE 1: VIEW MARKER AUTO-CREATION ---
+        # 1. Check if a view marker already exists for this node
+        markers = self.db.get_markers(self.current_node['id'])
+        view_marker_exists = any(m['metadata'].get('is_view_marker') for m in markers)
+
+        # 2. If not, create one.
+        if not view_marker_exists:
+            print(f"No view marker found for Node {self.current_node['id']}. Creating one.")
+            
+            # Default position is the center of the current camera view
+            marker_x = self.cam_x
+            marker_y = self.cam_y
+            
+            # Default metadata
+            view_meta = {
+                "is_view_marker": True,
+                "is_active": True,
+                "zoom": 1.5,
+                "radius": 15,
+                "explored_tiles": {}
+            }
+            
+            self.db.add_marker(
+                self.current_node['id'], 
+                marker_x, 
+                marker_y,
+                'eye',          # Symbol
+                'Party View',   # Title
+                'The party\'s current position and view.', # Description
+                view_meta
+            )
+        
+        # 3. Reload controller data to include the new marker if it was created
+        # This will call get_markers() inside the controller's __init__ again
+        if node_type in ['dungeon_level', 'building_interior', 'tactical_map', 'compound', 'dungeon_complex']:
+            self.controller = TacticalController(self.db, self.current_node, self.theme)
+        else:
+            self.controller = GeoController(self.db, self.current_node, self.theme)
+
 
     def handle_zoom(self, direction, mouse_pos):
-        """Zooms into the center of the screen, using the controller's speed."""
         if not self.controller: return
-
-        # Get the zoom speed from the active controller
         zoom_speed = getattr(self.controller, 'zoom_factor', 1.2)
-        
-        if direction > 0: # Scroll up
-            self.zoom = min(20.0, self.zoom * zoom_speed)
-        else: # Scroll down
-            self.zoom = max(0.05, self.zoom / zoom_speed)
+        if direction > 0: self.zoom = min(20.0, self.zoom * zoom_speed)
+        else: self.zoom = max(0.05, self.zoom / zoom_speed)
 
     def save_current_state(self):
         if not self.current_node or not self.controller: return
@@ -69,20 +107,7 @@ class MapViewer:
 
     def handle_input(self, event):
         if not self.controller: return
-
-        # RESTORED: Keyboard zoom works again
-        if event.type == pygame.KEYDOWN:
-            if event.key == pygame.K_LEFTBRACKET:
-                self.zoom = max(0.1, self.zoom * 0.9)
-                return
-            if event.key == pygame.K_RIGHTBRACKET:
-                self.zoom = min(20.0, self.zoom * 1.1)
-                return
-            if event.key == pygame.K_h: self.show_ui = not self.show_ui; return
-            if event.key == pygame.K_s: self.save_current_state(); return
-
         result = self.controller.handle_input(event, self.cam_x, self.cam_y, self.zoom)
-        
         if result:
             if result.get("action") == "pan":
                 self.cam_x, self.cam_y = result['pos']
@@ -101,19 +126,15 @@ class MapViewer:
         self._draw_scale_bar()
 
     def _draw_sidebar(self):
-        pygame.draw.rect(self.screen, (30,30,40), (0,0,260, SCREEN_HEIGHT))
-        pygame.draw.rect(self.screen, (100,100,100), (0,0,260, SCREEN_HEIGHT), 2)
+        pygame.draw.rect(self.screen, (30,30,40), (0,0, SIDEBAR_WIDTH, SCREEN_HEIGHT))
+        pygame.draw.rect(self.screen, (100,100,100), (0,0, SIDEBAR_WIDTH, SCREEN_HEIGHT), 2)
         if self.current_node: 
             title = self.current_node.get('name', 'Unknown')
             type_str = self.current_node.get('type', 'unknown').replace('_', ' ').title()
             self.screen.blit(self.font_title.render(f"{title}", True, (255,255,255)), (20,15))
             self.screen.blit(self.font_ui.render(f"({type_str})", True, (150,150,150)), (20,45))
-
         if self.controller:
             for widget in self.controller.widgets: widget.draw(self.screen)
-            if hasattr(self.controller, 'active_vector') and self.controller.active_vector:
-                lbl = self.font_ui.render(f"EDIT: {self.controller.active_vector['type'].upper()}", True, (255,200,100))
-                self.screen.blit(lbl, (20, 370))
 
     def _draw_scale_bar(self):
         map_width_m = self.current_node.get('geometry_data', {}).get('width', 100)

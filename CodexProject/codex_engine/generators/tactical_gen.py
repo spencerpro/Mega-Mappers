@@ -11,19 +11,30 @@ class TacticalGenerator:
         """
         Dispatches generation to the correct module based on marker metadata.
         """
-        # 1. Check for Blueprint (Deterministic Building)
-        if marker['metadata'].get('blueprint_id'):
-            print(f"--- Dispatching {marker['title']} to BuildingGenerator ---")
-            return self.building_gen.generate(parent_node, marker, campaign_id)
+        bp_id = marker['metadata'].get('blueprint_id')
         
-        # 2. Check for Dungeon Tags (Procedural Dungeon)
+        # 1. Blueprint Logic
+        if bp_id:
+            # We need to guess if it's a building or dungeon based on some logic,
+            # OR we rely on the marker symbol/metadata.
+            # Ideally, the blueprint system itself would know, but here we dispatch.
+            
+            # Simple heuristic: If it comes from the 'dungeons' folder (we can't verify easily here without loading),
+            # but usually the dropdown UI separated them.
+            # Let's assume the UI set a 'type' or we check the symbol.
+            
+            if "skull" in marker['symbol'] or "dungeon" in marker['title'].lower():
+                 print(f"--- Dispatching {marker['title']} to DungeonGenerator (Blueprint: {bp_id}) ---")
+                 return self.dungeon_gen.generate_dungeon_complex(parent_node, marker, campaign_id)
+            else:
+                 print(f"--- Dispatching {marker['title']} to BuildingGenerator (Blueprint: {bp_id}) ---")
+                 return self.building_gen.generate(parent_node, marker, campaign_id)
+        
+        # 2. Procedural Fallback (No Blueprint)
         elif "skull" in marker['symbol'] or "dungeon" in marker['title'].lower():
-            print(f"--- Dispatching {marker['title']} to DungeonGenerator ---")
-            # Default to 3 levels for now, or read from metadata
-            depth = marker['metadata'].get('dungeon_depth', 3) 
-            return self.dungeon_gen.generate_dungeon_complex(parent_node, marker, campaign_id, levels=depth)
+            print(f"--- Dispatching {marker['title']} to DungeonGenerator (Procedural) ---")
+            return self.dungeon_gen.generate_dungeon_complex(parent_node, marker, campaign_id) # Will use default
 
-        # 3. Fallback / Default
         else:
             print("--- Unknown type, defaulting to simple generic room ---")
-            return self.dungeon_gen.generate_single_room(parent_node, marker, campaign_id)
+            return self.dungeon_gen.generate_dungeon_complex(parent_node, marker, campaign_id) # Defaults

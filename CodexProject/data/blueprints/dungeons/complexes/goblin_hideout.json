@@ -1,0 +1,17 @@
+{
+  "id": "goblin_hideout",
+  "type": "dungeon_complex",
+  "name": "Goblin Hideout (2 Levels)",
+  "levels": [
+    {
+      "depth": 1,
+      "blueprint_id": "cavern_deep",
+      "name_override": "Entrance Cave"
+    },
+    {
+      "depth": 2,
+      "blueprint_id": "crypt_small",
+      "name_override": "Loot Storage"
+    }
+  ]
+}

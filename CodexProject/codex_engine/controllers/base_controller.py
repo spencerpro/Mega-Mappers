@@ -32,6 +32,11 @@ class BaseController(ABC):
         pass
 
     @abstractmethod
+    def render_player_view_surface(self):
+        """Headless render from the active view marker's perspective."""
+        pass
+
+    @abstractmethod
     def get_metadata_updates(self):
         """Returns a dictionary of metadata to save to the DB."""
         return {}

@@ -1,0 +1,31 @@
+{
+    "colors": {
+        "background": [
+            180,
+            160,
+            130
+        ],
+        "ink": [
+            80,
+            80,
+            80
+        ],
+        "accent": [
+            150,
+            200,
+            50
+        ]
+    },
+    "vocabulary": {
+        "inn": "Scrap Shack",
+        "currency": "Caps",
+        "town": "Settlement"
+    },
+    "generation_rules": {
+        "world": {
+            "terrain_type": "desert"
+        },
+        "tactical_style": "blueprint"
+    },
+    "ai_prompt_prefix": "Your tone is gritty and survivalist, like the Fallout universe..."
+}

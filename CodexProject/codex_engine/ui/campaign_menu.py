@@ -1,7 +1,8 @@
 import pygame
+import os
 from codex_engine.core.db_manager import DBManager
-from codex_engine.ui.widgets import Button, InputBox
-from codex_engine.config import SCREEN_HEIGHT # Import SCREEN_HEIGHT
+from codex_engine.ui.widgets import Button, InputBox, SimpleDropdown, ContextMenu
+from codex_engine.config import SCREEN_HEIGHT, THEMES_DIR
 
 class CampaignMenu:
     def __init__(self, screen, db_manager: DBManager):
@@ -20,50 +21,89 @@ class CampaignMenu:
         
         self.input_name = InputBox(800, 200, 300, 40, self.font_ui)
         
-        # --- FIX: Use SCREEN_HEIGHT for positioning ---
         button_y = SCREEN_HEIGHT - 100 
         self.btn_new = Button(50, button_y, 200, 50, "New Campaign", self.font_ui, (100, 200, 100), (150, 250, 150), (0,0,0), self.switch_to_create)
         
         self.btn_create = Button(800, 400, 200, 50, "Create World", self.font_ui, (100, 200, 100), (150, 250, 150), (0,0,0), self.do_create)
         self.btn_cancel = Button(1020, 400, 150, 50, "Cancel", self.font_ui, (200, 100, 100), (250, 150, 150), (0,0,0), self.switch_to_select)
         
-        self.themes = ["fantasy", "scifi"]
-        self.selected_theme_idx = 0
+        self.themes = self._load_themes()
+        self.dd_themes = SimpleDropdown(800, 300, 300, 40, self.font_ui, self.themes)
+
+        self.context_menu = None
+        self.right_clicked_campaign = None
+
+    def _load_themes(self):
+        """Scans the themes directory for available .json files."""
+        if not THEMES_DIR.exists(): return ["fantasy"] 
+        theme_files = [f.stem for f in THEMES_DIR.glob("*.json")]
+        theme_files.sort()
+        return theme_files if theme_files else ["fantasy"]
         
     def refresh_list(self): self.campaign_list = self.db.get_all_campaigns()
-    def switch_to_create(self): self.mode = "CREATE"; self.input_name.text = ""; self.input_name.txt_surface = self.input_name.font.render("", True, (0,0,0))
+
+    #def switch_to_create(self): self.mode = "CREATE"; self.input_name.text = ""; self.input_name.txt_surface = self.input_name.font.render("", True, (0,0,0))
+    def switch_to_create(self): 
+        self.mode = "CREATE"
+        self.input_name.text = ""
+        self.dd_themes.selected_idx = -1 # Reset the dropdown
+
     def switch_to_select(self): self.mode = "SELECT"
+    
     def do_create(self):
         name = self.input_name.text.strip()
-        if not name: return
-        theme = self.themes[self.selected_theme_idx]
+        theme = self.dd_themes.get_selected_id()
+        if not name or not theme: 
+            print("Validation Failed: Name and Theme required.")
+            return
         new_id = self.db.create_campaign(name, theme)
-        self.refresh_list()
-        self.mode = "SELECT"
+        self.refresh_list(); self.mode = "SELECT"
+
+    def do_delete_campaign(self):
+        if self.right_clicked_campaign:
+            self.db.delete_campaign(self.right_clicked_campaign['id'])
+            self.refresh_list()
+            self.right_clicked_campaign = None
+
+    def do_edit_campaign(self):
+        if self.right_clicked_campaign:
+            print(f"Editing campaign: {self.right_clicked_campaign['name']}")
         
     def handle_input(self, event):
+        if self.context_menu:
+            if self.context_menu.handle_event(event):
+                self.context_menu = None
+            return
+
         if self.mode == "SELECT":
             if event.type == pygame.MOUSEBUTTONDOWN:
-                mx, my = event.pos
-                start_y = 150
+                mx, my = event.pos; start_y = 150
                 for camp in self.campaign_list:
                     rect = pygame.Rect(50, start_y, 600, 50)
                     if rect.collidepoint(mx, my):
-                        self.selected_campaign_id = camp['id']
-                        return {"action": "load_campaign", "id": camp['id'], "theme": camp['theme_id']}
+                        if event.button == 1: # Left Click
+                            self.selected_campaign_id = camp['id']
+                            return {"action": "load_campaign", "id": camp['id'], "theme": camp['theme_id']}
+                        elif event.button == 3: # Right Click
+                            self.right_clicked_campaign = camp
+                            menu_options = [
+                                ("Edit", self.do_edit_campaign),
+                                ("", None),
+                                ("Delete", self.do_delete_campaign)
+                            ]
+                            self.context_menu = ContextMenu(mx, my, menu_options, self.font_ui)
                     start_y += 60
             self.btn_new.handle_event(event)
+        
         elif self.mode == "CREATE":
+            if self.dd_themes.handle_event(event): return
             self.input_name.handle_event(event)
             self.btn_create.handle_event(event)
             self.btn_cancel.handle_event(event)
-            if event.type == pygame.MOUSEBUTTONDOWN:
-                if pygame.Rect(800, 300, 300, 40).collidepoint(event.pos): self.selected_theme_idx = (self.selected_theme_idx + 1) % len(self.themes)
 
     def draw(self):
         self.screen.fill(self.c_bg)
         
-        # --- FIX: Use SCREEN_HEIGHT for panel height ---
         panel_height = SCREEN_HEIGHT - 60
         pygame.draw.rect(self.screen, self.c_panel, (30, 30, 640, panel_height), border_radius=10)
         
@@ -84,10 +124,8 @@ class CampaignMenu:
         if self.mode == "SELECT":
             self.btn_new.draw(self.screen)
             if self.selected_campaign_id:
-                # --- FIX: Use SCREEN_HEIGHT for instruction text ---
-                instr_y = SCREEN_HEIGHT - 85
                 instr = self.font_ui.render("Click Selected to Launch", True, (200, 200, 200))
-                self.screen.blit(instr, (400, instr_y))
+                self.screen.blit(instr, (400, SCREEN_HEIGHT - 85))
                 
         elif self.mode == "CREATE":
             pygame.draw.rect(self.screen, self.c_panel, (750, 100, 420, 400), border_radius=10)
@@ -99,9 +137,16 @@ class CampaignMenu:
             self.input_name.draw(self.screen)
             lbl_theme = self.font_ui.render("Select Theme:", True, self.c_text)
             self.screen.blit(lbl_theme, (800, 270))
-            pygame.draw.rect(self.screen, (255, 255, 255), (800, 300, 300, 40))
-            pygame.draw.rect(self.screen, (0,0,0), (800, 300, 300, 40), 2)
-            theme_txt = self.font_ui.render(self.themes[self.selected_theme_idx].title(), True, (0,0,0))
-            self.screen.blit(theme_txt, (810, 310))
+            
+            is_valid = self.input_name.text.strip() != "" and self.dd_themes.selected_idx != -1
+            original_color = self.btn_create.base_color
+            if not is_valid: self.btn_create.base_color = (100, 100, 100)
+
             self.btn_create.draw(self.screen)
             self.btn_cancel.draw(self.screen)
+            self.btn_create.base_color = original_color
+            
+            self.dd_themes.draw(self.screen)
+
+        if self.context_menu:
+            self.context_menu.draw(self.screen)

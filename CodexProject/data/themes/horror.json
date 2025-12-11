@@ -1,0 +1,33 @@
+{
+    "colors": {
+        "background": [
+            240,
+            238,
+            220
+        ],
+        "ink": [
+            50,
+            45,
+            40
+        ],
+        "accent": [
+            110,
+            20,
+            20
+        ]
+    },
+    "vocabulary": {
+        "inn": "Boarding House",
+        "police": "Investigators",
+        "dungeon": "Asylum"
+    },
+    "generation_rules": {
+        "world": {
+            "light_altitude": 25
+        },
+        "dungeon": {
+            "algorithm": "maze"
+        }
+    },
+    "ai_prompt_prefix": "You are a cosmic horror fiction generator in the style of H.P. Lovecraft..."
+}

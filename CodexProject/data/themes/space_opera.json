@@ -1,0 +1,33 @@
+{
+    "colors": {
+        "background": [
+            5,
+            5,
+            15
+        ],
+        "ink": [
+            220,
+            220,
+            255
+        ],
+        "accent": [
+            255,
+            200,
+            0
+        ]
+    },
+    "vocabulary": {
+        "inn": "Cantina",
+        "police": "Galactic Rangers",
+        "magic": "The Force"
+    },
+    "generation_rules": {
+        "world": {
+            "generator": "star_map"
+        },
+        "dungeon": {
+            "name_override": "Starship Interior"
+        }
+    },
+    "ai_prompt_prefix": "You are a space opera storyteller in the style of Star Wars. Focus on epic scale, alien empires, laser swords, and the struggle between good and evil..."
+}

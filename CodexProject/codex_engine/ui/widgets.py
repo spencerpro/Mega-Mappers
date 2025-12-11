@@ -1,5 +1,71 @@
 import pygame
 
+class SimpleDropdown:
+    def __init__(self, x, y, w, h, font, options, initial_val=None):
+        self.rect = pygame.Rect(x, y, w, h)
+        self.font = font
+        self.options = options # List of strings
+        self.is_open = False
+        self.selected_idx = -1
+        if initial_val and initial_val in options:
+            self.selected_idx = options.index(initial_val)
+        
+        self.color_bg = (60, 60, 80)
+        self.color_border = (100, 100, 120)
+        self.color_hover = (90, 90, 110)
+
+    def get_selected_id(self):
+        return self.options[self.selected_idx]
+
+    def handle_event(self, event):
+        if event.type == pygame.MOUSEBUTTONDOWN:
+            if self.is_open:
+                for i in range(len(self.options)):
+                    opt_rect = pygame.Rect(self.rect.x, self.rect.bottom + (i * 30), self.rect.width, 30)
+                    if opt_rect.collidepoint(event.pos):
+                        self.selected_idx = i
+                        self.is_open = False
+                        return True
+                self.is_open = False
+            else:
+                if self.rect.collidepoint(event.pos):
+                    self.is_open = True
+                    return True
+        return False
+
+    def draw(self, surface):
+        pygame.draw.rect(surface, self.color_bg, self.rect)
+        pygame.draw.rect(surface, self.color_border, self.rect, 1)
+
+        if self.selected_idx == -1:
+            text = "Choose a Theme..."
+            color = (180, 180, 180) # Greyed out
+        else:
+            text = self.options[self.selected_idx].title()
+            color = (255, 255, 255)
+        
+        surf = self.font.render(text, True, (255, 255, 255))
+        surface.blit(surf, (self.rect.x + 10, self.rect.y + 8))
+        
+        pygame.draw.polygon(surface, (200, 200, 200), [
+            (self.rect.right - 20, self.rect.y + 12),
+            (self.rect.right - 10, self.rect.y + 12),
+            (self.rect.right - 15, self.rect.y + 22)
+        ])
+
+        if self.is_open:
+            list_h = len(self.options) * 30
+            list_rect = pygame.Rect(self.rect.x, self.rect.bottom, self.rect.width, list_h)
+            pygame.draw.rect(surface, (25, 25, 30), list_rect)
+            pygame.draw.rect(surface, self.color_border, list_rect, 1)
+            mx, my = pygame.mouse.get_pos()
+            for i, opt in enumerate(self.options):
+                r = pygame.Rect(self.rect.x, self.rect.bottom + (i * 30), self.rect.width, 30)
+                if r.collidepoint((mx, my)):
+                    pygame.draw.rect(surface, self.color_hover, r)
+                txt = self.font.render(opt.title(), True, (220, 220, 220))
+                surface.blit(txt, (r.x + 10, r.y + 8))
+
 class Button:
     def __init__(self, x, y, w, h, text, font, base_color, hover_color, text_color, action=None):
         self.rect = pygame.Rect(x, y, w, h)
@@ -83,117 +149,6 @@ class Slider:
         color = (200, 200, 200) if not self.dragging else (255, 255, 255)
         pygame.draw.rect(surface, color, self.handle_rect, border_radius=3)
 
-class MarkerModal:
-    def __init__(self, x, y, on_save, on_cancel, marker_data=None, map_context="world_map", on_generate=None):
-        self.is_editing = marker_data is not None
-        self.marker_id = marker_data['id'] if self.is_editing else None
-        
-        self.rect = pygame.Rect(x, y, 320, 320) # Slightly wider/taller
-        self.on_save = on_save
-        self.on_cancel = on_cancel
-        self.on_generate = on_generate # Callback for AI
-        self.font = pygame.font.Font(None, 24)
-        
-        title = marker_data['title'] if self.is_editing else ""
-        note = marker_data['description'] if self.is_editing else ""
-        
-        self.input_title = InputBox(x+20, y+50, 280, 32, self.font, text=title)
-        self.input_note = InputBox(x+20, y+100, 280, 32, self.font, text=note)
-        
-        # --- DYNAMIC TYPES BASED ON CONTEXT ---
-        if map_context == "world_map":
-            self.types = [
-                {"label": "Village", "icon": "house"},
-                {"label": "Dungeon", "icon": "skull"},
-                {"label": "Note", "icon": "star"}
-            ]
-        else: # local_map or others
-            self.types = [
-                {"label": "Building", "icon": "house"},
-                {"label": "Dungeon Ent.", "icon": "skull"},
-                {"label": "Portal", "icon": "star"} # Placeholder for stairs/exits
-            ]
-        
-        # Default or Existing Selection
-        self.selected_type_idx = 0
-        if self.is_editing:
-            for i, t in enumerate(self.types):
-                if t['icon'] == marker_data.get('symbol', 'star'):
-                    self.selected_type_idx = i
-                    break
-        
-        # Buttons
-        self.btn_save = Button(x+20, y+270, 80, 30, "Save", self.font, (100,200,100), (150,250,150), (0,0,0), self.trigger_save)
-        self.btn_cancel = Button(x+110, y+270, 80, 30, "Cancel", self.font, (200,100,100), (250,150,150), (0,0,0), on_cancel)
-        
-        # AI Button (Only if on_generate callback provided)
-        self.btn_gen = None
-        if self.on_generate:
-            self.btn_gen = Button(x+200, y+270, 100, 30, "AI Gen", self.font, (100,100,200), (150,150,250), (255,255,255), self.trigger_gen)
-
-    def trigger_save(self):
-        if self.input_title.text:
-            selected = self.types[self.selected_type_idx]
-            self.on_save(self.marker_id, selected['icon'], self.input_title.text, self.input_note.text)
-
-    def trigger_gen(self):
-        if self.on_generate:
-            # Pass current title/type to the AI handler
-            selected = self.types[self.selected_type_idx]
-            new_desc = self.on_generate(selected['label'], self.input_title.text)
-            if new_desc:
-                self.input_note.text = new_desc
-                self.input_note.txt_surface = self.input_note.font.render(new_desc, True, self.input_note.color)
-
-    def handle_event(self, event):
-        self.input_title.handle_event(event)
-        self.input_note.handle_event(event)
-        self.btn_save.handle_event(event)
-        self.btn_cancel.handle_event(event)
-        if self.btn_gen: self.btn_gen.handle_event(event)
-        
-        if event.type == pygame.MOUSEBUTTONDOWN:
-            # Type Selection Logic
-            sx, sy = self.rect.x + 20, self.rect.y + 160
-            for i, t in enumerate(self.types):
-                r = pygame.Rect(sx, sy, 80, 50) # Taller for hit area
-                if r.collidepoint(event.pos):
-                    self.selected_type_idx = i
-                sx += 90
-
-    def draw(self, surface):
-        pygame.draw.rect(surface, (50, 50, 60), self.rect, border_radius=10)
-        pygame.draw.rect(surface, (200, 200, 200), self.rect, 2, border_radius=10)
-        
-        lbl = self.font.render("Marker Details", True, (255,255,255))
-        surface.blit(lbl, (self.rect.x+20, self.rect.y+10))
-        
-        lbl_t = self.font.render("Title:", True, (200,200,200))
-        surface.blit(lbl_t, (self.rect.x+20, self.rect.y+35))
-        self.input_title.draw(surface)
-        
-        lbl_n = self.font.render("Description:", True, (200,200,200))
-        surface.blit(lbl_n, (self.rect.x+20, self.rect.y+85))
-        self.input_note.draw(surface)
-        
-        # Type Buttons
-        sx, sy = self.rect.x + 20, self.rect.y + 160
-        for i, t in enumerate(self.types):
-            color = (100, 100, 150) if i == self.selected_type_idx else (70, 70, 80)
-            pygame.draw.rect(surface, color, (sx, sy, 80, 40), border_radius=5)
-            pygame.draw.rect(surface, (0,0,0), (sx, sy, 80, 40), 1, border_radius=5)
-            
-            # Label only (Icons are drawn as shapes in map_viewer, text here for clarity)
-            lab = pygame.font.Font(None, 20).render(t['label'], True, (200,200,200))
-            surface.blit(lab, (sx+5, sy+12))
-            
-            sx += 90
-            
-        self.btn_save.draw(surface)
-        self.btn_cancel.draw(surface)
-        if self.btn_gen: self.btn_gen.draw(surface)
-
-
 class Dropdown:
     def __init__(self, x, y, w, h, font, options, initial_id=None):
         self.rect = pygame.Rect(x, y, w, h)
@@ -213,11 +168,6 @@ class Dropdown:
         self.color_bg = (30, 30, 40)
         self.color_border = (100, 100, 120)
         self.color_hover = (60, 60, 80)
-
-    def get_selected_id(self):
-        if self.selected_idx >= 0 and self.selected_idx < len(self.options):
-            return self.options[self.selected_idx]['id']
-        return None
 
     def handle_event(self, event):
         if event.type == pygame.MOUSEBUTTONDOWN:
@@ -239,12 +189,15 @@ class Dropdown:
                     return True
         return False
 
+    def get_selected_id(self):
+        if self.selected_idx >= 0 and self.selected_idx < len(self.options):
+            return self.options[self.selected_idx]['id']
+        return None
+
     def draw(self, surface):
-        # Draw Main Box
         pygame.draw.rect(surface, self.color_bg, self.rect)
         pygame.draw.rect(surface, self.color_border, self.rect, 1)
         
-        # Draw Selected Text
         text = "Select Blueprint..."
         if self.selected_idx >= 0:
             text = self.options[self.selected_idx]['name']
@@ -252,16 +205,13 @@ class Dropdown:
         surf = self.font.render(text, True, (255, 255, 255))
         surface.blit(surf, (self.rect.x + 5, self.rect.y + 8))
         
-        # Draw Arrow
         pygame.draw.polygon(surface, (200, 200, 200), [
             (self.rect.right - 15, self.rect.y + 10),
             (self.rect.right - 5, self.rect.y + 10),
             (self.rect.right - 10, self.rect.y + 20)
         ])
 
-        # Draw List (if open)
         if self.is_open:
-            # Draw a giant background for the list
             list_h = len(self.options) * 30
             list_rect = pygame.Rect(self.rect.x, self.rect.bottom, self.rect.width, list_h)
             pygame.draw.rect(surface, (25, 25, 30), list_rect)
@@ -271,14 +221,13 @@ class Dropdown:
             
             for i, opt in enumerate(self.options):
                 r = pygame.Rect(self.rect.x, self.rect.bottom + (i * 30), self.rect.width, 30)
-                
-                # Highlight hover
                 if r.collidepoint((mx, my)):
                     pygame.draw.rect(surface, self.color_hover, r)
                 
-                # Draw Text
-                # Prefix structures vs compounds for clarity
-                prefix = "[C] " if opt.get('type') == 'compounds' else "    "
+                prefix = ""
+                if opt.get('category') == 'Complex': prefix = "[C] "
+                elif opt.get('id') is None: prefix = ""
+                
                 label = prefix + opt['name']
                 
                 txt = self.font.render(label, True, (220, 220, 220))
@@ -318,7 +267,21 @@ class ContextMenu:
         pygame.draw.rect(surface, self.border_color, self.rect, 1)
         
         mx, my = pygame.mouse.get_pos()
+
+        for i, (label, _) in enumerate(self.options):
+            item_rect = pygame.Rect(self.rect.x, self.rect.y + i * self.item_height, self.rect.width, self.item_height)
+            
+            # Skip drawing/interaction for separator
+            if label == "":
+                continue
+
+            if item_rect.collidepoint(mx, my):
+                pygame.draw.rect(surface, self.hover_color, item_rect)
+            
+            text_surf = self.font.render(label, True, self.text_color)
+            surface.blit(text_surf, (item_rect.x + 10, item_rect.y + 7))
         
+        """
         for i, (label, _) in enumerate(self.options):
             item_rect = pygame.Rect(self.rect.x, self.rect.y + i * self.item_height, self.rect.width, self.item_height)
             if item_rect.collidepoint(mx, my):
@@ -326,3 +289,116 @@ class ContextMenu:
             
             text_surf = self.font.render(label, True, self.text_color)
             surface.blit(text_surf, (item_rect.x + 10, item_rect.y + 7))
+"""
+
+class StructureBrowser:
+    def __init__(self, x, y, w, h, db, current_node_id, font, on_navigate):
+        self.rect = pygame.Rect(x, y, w, h)
+        self.db = db
+        self.font = font
+        self.on_navigate = on_navigate
+        self.scroll_y = 0
+        
+        # Get full tree
+        full_data = self.db.get_structure_tree(current_node_id)
+        
+        self.structure_data = full_data
+        
+        self.buttons = []
+        btn_h = 30
+        
+        for i, item in enumerate(self.structure_data):
+            indent = (item['depth'] - 1) * 15 # Adjust indent since we skipped root
+            if indent < 0: indent = 0
+            
+            bx = x + indent
+            bw = w - indent - 10
+            by = y + (i * (btn_h + 5))
+            
+            label = item['name']
+            if item['type'] == 'dungeon_level': 
+                label = f"💀 {label}"
+            elif item['type'] == 'building_interior':
+                label = f"└ {label}"
+            else: 
+                label = f"• {label}"
+            
+            base_col = (100, 150, 100) if item['is_current'] else (60, 60, 70)
+            
+            btn = Button(
+                bx, by, bw, btn_h, 
+                label, font, 
+                base_col, (90, 90, 110), (255, 255, 255),
+                lambda nid=item['id']: self.on_navigate(nid)
+            )
+            self.buttons.append(btn)
+
+    def handle_event(self, event):
+        for btn in self.buttons:
+            res = btn.handle_event(event)
+            if res: return res
+        return None
+
+    def draw(self, surface):
+        surface.set_clip(self.rect)
+        for btn in self.buttons:
+            btn.draw(surface)
+        surface.set_clip(None)
+
+class StructureBrowser_old:
+    def __init__(self, x, y, w, h, db, current_node_id, font, on_navigate):
+        self.rect = pygame.Rect(x, y, w, h)
+        self.db = db
+        self.font = font
+        self.on_navigate = on_navigate
+        self.scroll_y = 0
+        
+        # Fetch Data
+        self.structure_data = self.db.get_structure_tree(current_node_id)
+        
+        # Create Buttons for each node
+        self.buttons = []
+        btn_h = 30
+        
+        for i, item in enumerate(self.structure_data):
+            # Indent based on depth
+            indent = item['depth'] * 15
+            bx = x + indent
+            bw = w - indent - 10
+            by = y + (i * (btn_h + 5))
+            
+            # Visuals
+            label = item['name']
+            if item['type'] == 'compound': label = f"🏠 {label}"
+            elif item['type'] == 'dungeon_level': label = f"💀 {label}"
+            else: label = f"└ {label}"
+            
+            # Highlight current node
+            base_col = (100, 150, 100) if item['is_current'] else (60, 60, 70)
+            
+            btn = Button(
+                bx, by, bw, btn_h, 
+                label, font, 
+                base_col, (90, 90, 110), (255, 255, 255),
+                lambda nid=item['id']: self.on_navigate(nid)
+            )
+            # Store relative Y for scrolling later if needed
+            btn.rel_y = (i * (btn_h + 5))
+            self.buttons.append(btn)
+
+    def handle_event(self, event):
+        # (Simple scrolling could be added here similar to InfoPanel)
+        for btn in self.buttons:
+            res = btn.handle_event(event)
+            if res: return res # The lambda triggers navigation
+        return None
+
+    def draw(self, surface):
+        # Clip to area
+        surface.set_clip(self.rect)
+        # Optional: draw background
+        # pygame.draw.rect(surface, (30,30,35), self.rect)
+        for btn in self.buttons:
+            btn.draw(surface)
+        surface.set_clip(None)
+

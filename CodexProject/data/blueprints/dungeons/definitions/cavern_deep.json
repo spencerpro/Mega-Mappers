@@ -1,0 +1,12 @@
+{
+  "id": "cavern_deep",
+  "type": "dungeon_definition",
+  "name": "Deep Caverns",
+  "generator_config": {
+    "algorithm": "organic",
+    "room_count": 20,
+    "min_room_size": 10,
+    "max_room_size": 20,
+    "corridor_width": 2
+  }
+}

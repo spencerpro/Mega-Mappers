@@ -2,206 +2,165 @@ import pygame
 import random
 import math
 import heapq
-
-# --- SETTINGS ---
-TURN_PENALTY = 5
-ADJACENCY_PENALTY = 20
-ROOM_PADDING = 3
-
-class Room:
-    def __init__(self, x, y, width, height, id):
-        self.id = id
-        self.rect = pygame.Rect(x, y, width, height)
-        self.center = self.rect.center
-    def intersects(self, other_room):
-        return self.rect.colliderect(other_room.rect.inflate(ROOM_PADDING * 2, ROOM_PADDING * 2))
-
-class AStarNode:
-    def __init__(self, parent=None, position=None, direction=(0,0)):
-        self.parent, self.position, self.direction = parent, position, direction
-        self.g, self.h, self.f = 0, 0, 0
-    def __eq__(self, other): return self.position == other.position
-    def __lt__(self, other): return self.f < other.f
-    def __hash__(self): return hash(self.position)
+import json
+import os
+from codex_engine.config import DATA_DIR
 
 class DungeonGenerator:
     def __init__(self, db_manager):
         self.db = db_manager
-        # Configurable settings
-        self.world_w = 60
-        self.world_h = 60
-        self.min_room_size = 6
-        self.max_room_size = 12
-        self.max_rooms = 40
+        self.bp_path = DATA_DIR / "blueprints" / "dungeons"
 
-    def generate_dungeon_complex(self, parent_node, marker, campaign_id, levels=3):
-        previous_level_node_id = parent_node['id']
+    def _load_complex(self, bp_id):
+        path = self.bp_path / "complexes" / f"{bp_id}.json"
+        if path.exists():
+            with open(path, 'r') as f: return json.load(f)
+        return None
+
+    def _load_definition(self, bp_id):
+        path = self.bp_path / "definitions" / f"{bp_id}.json"
+        if path.exists():
+            with open(path, 'r') as f: return json.load(f)
+        return None
+
+    def generate_dungeon_complex(self, parent_node, marker, campaign_id, levels=None):
+        bp_id = marker['metadata'].get('blueprint_id')
+        
+        if not bp_id:
+            # Fallback for generic "Skull" markers
+            return self._generate_fallback(parent_node, marker, campaign_id)
+
+        complex_bp = self._load_complex(bp_id)
+        # Handle case where a user selects a Definition directly instead of a Complex
+        if not complex_bp:
+            def_bp = self._load_definition(bp_id)
+            if def_bp:
+                complex_bp = {"name": def_bp['name'], "levels": [{"depth": 1, "blueprint_id": bp_id}]}
+            else:
+                return self._generate_fallback(parent_node, marker, campaign_id)
+
+        print(f"--- Generating Dungeon: {complex_bp['name']} ---")
+
+        # PARENT IS THE LOCAL MAP DIRECTLY (No intermediate container)
+        levels_parent_id = parent_node['id']
+        
+        previous_level_node_id = levels_parent_id
         first_level_id = None
         
-        for i in range(1, levels + 1):
-            level_name = f"{marker['title']} - Level {i}"
+        for level_config in complex_bp['levels']:
+            depth = level_config['depth']
+            def_id = level_config['blueprint_id']
             
+            level_def = self._load_definition(def_id)
+            if not level_def: continue
+
+            level_name = level_config.get('name_override', f"Level {depth}")
+            
+            # Create Node
             node_id = self.db.create_node(
-                campaign_id, "dungeon_level", parent_node['id'],
+                campaign_id, "dungeon_level", levels_parent_id,
                 int(marker['world_x']), int(marker['world_y']), level_name
             )
             
-            if i == 1:
-                first_level_id = node_id
+            if depth == 1: first_level_id = node_id
 
-            grid, rooms = self._generate_layout()
+            # Generate Geometry
+            gen_config = level_def.get('generator_config', {})
+            grid, rooms = self._generate_layout(gen_config)
             
-            self.db.update_node_data(node_id, geometry={
-                "grid": grid, 
-                "width": self.world_w, 
-                "height": self.world_h,
-                "rooms": [list(r.rect) for r in rooms]
-            })
+            # --- METADATA & GEOMETRY STORAGE ---
+            self.db.update_node_data(node_id, 
+                geometry={
+                    "grid": grid, 
+                    "width": len(grid[0]), 
+                    "height": len(grid),
+                    "rooms": [list(r) for r in rooms]
+                },
+                metadata={
+                    "render_style": level_config.get('theme_override', 'hand_drawn'),
+                    "overview": complex_bp.get('description', 'A dark and dangerous place.'),
+                    "source_marker_id": marker['id'], # CRITICAL: Links siblings together
+                    "depth": depth
+                }
+            )
 
+            # Markers (Stairs/Numbers)
             if rooms:
-                # --- FIX: ADD ROOM NUMBER MARKERS ---
-                for room in rooms:
-                    self.db.add_marker(
-                        node_id, 
-                        room.rect.x + 0.5, # Place in top-left corner of room
-                        room.rect.y + 0.5,
-                        'room_number',
-                        f"{room.id + 1}", # The text to be displayed
-                        "An unexplored chamber."
-                    )
+                for i, r in enumerate(rooms):
+                    self.db.add_marker(node_id, r[0] + 0.5, r[1] + 0.5, 'room_number', str(i+1), "An unexplored chamber.")
 
-                # Stairs Up (in the first room)
                 up_room = rooms[0]
-                self.db.add_marker(node_id, up_room.center[0], up_room.center[1], "stairs_up", "Stairs Up", "", metadata={"portal_to": previous_level_node_id})
+                cx, cy = up_room[0] + up_room[2]//2, up_room[1] + up_room[3]//2
+                self.db.add_marker(node_id, cx, cy, "stairs_up", "Stairs Up", "", metadata={"portal_to": previous_level_node_id})
 
-                # Stairs Down (in the last room, if not the last level)
-                if i < levels:
-                    down_room = rooms[-1]
-                    self.db.add_marker(node_id, down_room.center[0], down_room.center[1], "stairs_down", "Stairs Down", "", metadata={})
+            if depth < len(complex_bp['levels']):
+                down_room = rooms[-1]
+                dx, dy = down_room[0] + down_room[2]//2, down_room[1] + down_room[3]//2
+                self.db.add_marker(node_id, dx, dy, "stairs_down", "Stairs Down", "Leads deeper...", metadata={})
+
+            if depth > 1:
+                self._link_down_stairs(previous_level_node_id, node_id)
 
             previous_level_node_id = node_id
 
         return first_level_id
 
-    def generate_single_room(self, parent_node, marker, campaign_id):
-        w, h = 20, 20
-        grid = [[1 for _ in range(w)] for _ in range(h)]
-        nid = self.db.create_node(campaign_id, "dungeon_level", parent_node['id'], int(marker['world_x']), int(marker['world_y']), "Single Room")
-        self.db.update_node_data(nid, geometry={"grid": grid, "width": w, "height": h})
+    def _link_down_stairs(self, from_node, to_node):
+        markers = self.db.get_markers(from_node)
+        for m in markers:
+            if m['symbol'] == 'stairs_down':
+                meta = m['metadata']
+                meta['portal_to'] = to_node
+                self.db.update_marker(m['id'], metadata=meta)
+                break
+
+    def _generate_fallback(self, parent_node, marker, campaign_id):
+        w, h = 40, 40
+        grid = [[0]*w for _ in range(h)]
+        for y in range(10, 30):
+            for x in range(10, 30): grid[y][x] = 1
+        
+        nid = self.db.create_node(campaign_id, "dungeon_level", parent_node['id'], int(marker['world_x']), int(marker['world_y']), "Unknown Lair")
+        self.db.update_node_data(nid, 
+            geometry={"grid": grid, "width": w, "height": h, "rooms": [[10,10,20,20]]},
+            metadata={"render_style": "hand_drawn", "source_marker_id": marker['id']}
+        )
+        self.db.add_marker(nid, 20, 20, "stairs_up", "Exit", "", metadata={"portal_to": parent_node['id']})
         return nid
 
-    def _generate_layout(self):
-        grid = [[0 for _ in range(self.world_w)] for _ in range(self.world_h)]
+    def _generate_layout(self, config):
+        width = config.get('width', 60); height = config.get('height', 60)
+        min_size = config.get('min_room_size', 6); max_size = config.get('max_room_size', 12)
+        room_count = config.get('room_count', 15)
+        grid = [[0 for _ in range(width)] for _ in range(height)]
         rooms = []
-        
-        for _ in range(5000):
-            if len(rooms) >= self.max_rooms: break
-            w = random.randint(self.min_room_size, self.max_room_size)
-            h = random.randint(self.min_room_size, self.max_room_size)
-            x = random.randint(2, self.world_w - w - 2)
-            y = random.randint(2, self.world_h - h - 2)
-            new_room = Room(x, y, w, h, len(rooms))
-            if not any(new_room.intersects(other) for other in rooms):
-                rooms.append(new_room)
-        
-        rooms.sort(key=lambda r: (r.rect.y, r.rect.x))
-        for i, r in enumerate(rooms): r.id = i
-        
-        for r in rooms:
-            for ry in range(r.rect.height):
-                for rx in range(r.rect.width):
-                    grid[r.rect.y + ry][r.rect.x + rx] = 1
-
+        for _ in range(100):
+            if len(rooms) >= room_count: break
+            w = random.randint(min_size, max_size); h = random.randint(min_size, max_size)
+            x = random.randint(2, width - w - 2); y = random.randint(2, height - h - 2)
+            new_rect = pygame.Rect(x, y, w, h)
+            if not any(new_rect.colliderect(pygame.Rect(r).inflate(2,2)) for r in rooms):
+                rooms.append([x, y, w, h])
+                for ry in range(y, y+h):
+                    for rx in range(x, x+w): grid[ry][rx] = 1
         if len(rooms) > 1:
-            self._route_corridors(grid, rooms)
-
+            for i in range(len(rooms)-1):
+                r1 = rooms[i]; r2 = rooms[i+1]
+                c1 = (r1[0] + r1[2]//2, r1[1] + r1[3]//2); c2 = (r2[0] + r2[2]//2, r2[1] + r2[3]//2)
+                self._carve_corridor(grid, c1, c2, width, height)
         return grid, rooms
 
-    def _route_corridors(self, grid, rooms):
-        room_map = {r.id: r for r in rooms}
-        edges = []
-        for i, r1 in enumerate(rooms):
-            for j in range(i + 1, len(rooms)):
-                r2 = rooms[j]
-                dist = math.hypot(r1.center[0] - r2.center[0], r1.center[1] - r2.center[1])
-                edges.append((dist, r1.id, r2.id))
-        
-        edges.sort()
-        connections, mst_pairs = [], set()
-        parent = {r.id: r.id for r in rooms}
-        
-        def find(id):
-            if parent[id] == id: return id
-            parent[id] = find(parent[id]); return parent[id]
-            
-        def union(id1, id2):
-            r1, r2 = find(id1), find(id2)
-            if r1 != r2: parent[r1] = r2; return True
-            return False
-            
-        for _, r1_id, r2_id in edges:
-            if union(r1_id, r2_id):
-                connections.append((room_map[r1_id], room_map[r2_id]))
-                mst_pairs.add(tuple(sorted((r1_id, r2_id))))
-                
-        extra_edges = [e for e in edges if tuple(sorted((e[1], e[2]))) not in mst_pairs]
-        random.shuffle(extra_edges)
-        connections.extend([(room_map[e[1]], room_map[e[2]]) for e in extra_edges[:len(rooms)//4]])
+    def _carve_corridor(self, grid, start, end, max_w, max_h):
+        x1, y1 = start; x2, y2 = end
+        if random.random() > 0.5:
+            self._line(grid, x1, y1, x2, y1, max_w, max_h); self._line(grid, x2, y1, x2, y2, max_w, max_h)
+        else:
+            self._line(grid, x1, y1, x1, y2, max_w, max_h); self._line(grid, x1, y2, x2, y2, max_w, max_h)
 
-        for r1, r2 in connections:
-            start_pos, end_pos = r1.center, r2.center
-            path = self._find_path_a_star(grid, start_pos, end_pos)
-            if path:
-                for p in path:
-                    if grid[p[1]][p[0]] == 0: grid[p[1]][p[0]] = 2
-            else:
-                self._force_corridor_l_shape(grid, start_pos, end_pos)
-
-    def _force_corridor_l_shape(self, grid, start, end):
-        x, y = start
-        target_x, target_y = end
-        step_x = 1 if target_x > x else -1
-        step_y = 1 if target_y > y else -1
-        while x != target_x:
-            if 0 <= x < self.world_w and 0 <= y < self.world_h and grid[y][x] == 0: grid[y][x] = 2
-            x += step_x
-        while y != target_y:
-            if 0 <= x < self.world_w and 0 <= y < self.world_h and grid[y][x] == 0: grid[y][x] = 2
-            y += step_y
-
-    def _find_path_a_star(self, grid, start, end):
-        start_node = AStarNode(None, start)
-        open_list, closed_set = [start_node], set()
-        
-        while open_list:
-            current = heapq.heappop(open_list)
-            if current.position in closed_set: continue
-            closed_set.add(current.position)
-            
-            if current.position == end:
-                path = []
-                while current: path.append(current.position); current = current.parent
-                return path[::-1]
-            
-            (x, y) = current.position
-            for dx, dy in [(0,-1), (0,1), (-1,0), (1,0)]:
-                nx, ny = x + dx, y + dy
-                if not (0 <= nx < self.world_w and 0 <= ny < self.world_h): continue
-                
-                cost = 1
-                if grid[ny][nx] == 1: cost += 100
-                if current.parent and (dx, dy) != current.direction: cost += TURN_PENALTY
-                
-                adj = 0
-                for ax, ay in [(0,-1),(0,1),(-1,0),(1,0)]:
-                    cx, cy = nx+ax, ny+ay
-                    if 0 <= cx < self.world_w and 0 <= cy < self.world_h and grid[cy][cx] == 1:
-                        adj = ADJACENCY_PENALTY; break
-                
-                new_node = AStarNode(current, (nx, ny), (dx, dy))
-                new_node.g = current.g + cost + adj
-                new_node.h = abs(nx - end[0]) + abs(ny - end[1])
-                new_node.f = new_node.g + new_node.h
-                heapq.heappush(open_list, new_node)
-        
-        return None
+    def _line(self, grid, x1, y1, x2, y2, w, h):
+        if x1 == x2:
+            for y in range(min(y1, y2), max(y1, y2) + 1):
+                if 0 <= x1 < w and 0 <= y < h and grid[y][x1] == 0: grid[y][x1] = 2
+        elif y1 == y2:
+            for x in range(min(x1, x2), max(x1, x2) + 1):
+                if 0 <= x < w and 0 <= y1 < h and grid[y1][x] == 0: grid[y1][x] = 2

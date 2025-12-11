@@ -1,0 +1,22 @@
+{
+  "id": "ancient_crypt",
+  "type": "dungeon_complex",
+  "name": "Ancient Crypt (3 Levels)",
+  "levels": [
+    {
+      "depth": 1,
+      "blueprint_id": "crypt_standard",
+      "name_override": "The Upper Tombs"
+    },
+    {
+      "depth": 2,
+      "blueprint_id": "crypt_standard",
+      "name_override": "The Lower Tombs"
+    },
+    {
+      "depth": 3,
+      "blueprint_id": "cavern_deep",
+      "name_override": "The Root Caverns"
+    }
+  ]
+}

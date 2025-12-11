@@ -1,0 +1,12 @@
+{
+  "id": "crypt_standard",
+  "type": "dungeon_definition",
+  "name": "Standard Crypt Layout",
+  "generator_config": {
+    "algorithm": "rooms_and_corridors",
+    "room_count": 12,
+    "min_room_size": 4,
+    "max_room_size": 8,
+    "corridor_width": 1
+  }
+}
