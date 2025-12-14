@@ -150,6 +150,140 @@ class Slider:
         pygame.draw.rect(surface, color, self.handle_rect, border_radius=3)
 
 class Dropdown:
+    def __init__(self, x, y, w, h, font, options, initial_id=None, max_visible=5):
+        self.rect = pygame.Rect(x, y, w, h)
+        self.font = font
+        self.options = options # List of dicts {'id': 'x', 'name': 'Y'}
+        self.is_open = False
+        self.selected_idx = -1
+        self.max_visible = max_visible
+        self.scroll_offset = 0
+        
+        # Styles
+        self.color_bg = (30, 30, 40)
+        self.color_border = (100, 100, 120)
+        self.color_hover = (60, 60, 80)
+        self.item_height = 30
+
+        if initial_id:
+            self.set_selection_by_id(initial_id)
+
+    def set_selection_by_id(self, id_val):
+        for i, opt in enumerate(self.options):
+            if opt['id'] == id_val:
+                self.selected_idx = i
+                return
+        self.selected_idx = -1
+
+    def handle_event(self, event):
+        if event.type == pygame.MOUSEBUTTONDOWN:
+            if self.is_open:
+                # 1. Check Scrollbar/List Area
+                list_h = min(len(self.options), self.max_visible) * self.item_height
+                list_rect = pygame.Rect(self.rect.x, self.rect.bottom, self.rect.width, list_h)
+                
+                if list_rect.collidepoint(event.pos):
+                    # Calculate index based on scroll
+                    local_y = event.pos[1] - list_rect.y
+                    idx = (local_y // self.item_height) + self.scroll_offset
+                    
+                    if 0 <= idx < len(self.options):
+                        self.selected_idx = idx
+                        self.is_open = False
+                        return True
+                else:
+                    self.is_open = False # Clicked outside
+            else:
+                if self.rect.collidepoint(event.pos):
+                    self.is_open = True
+                    return True
+                    
+        elif event.type == pygame.MOUSEWHEEL and self.is_open:
+            if len(self.options) > self.max_visible:
+                self.scroll_offset -= event.y
+                self.scroll_offset = max(0, min(self.scroll_offset, len(self.options) - self.max_visible))
+                return True
+                
+        return False
+
+    def get_selected_id(self):
+        if self.selected_idx >= 0 and self.selected_idx < len(self.options):
+            return self.options[self.selected_idx]['id']
+        return None
+
+    def draw(self, surface):
+        # Draw Main Box
+        pygame.draw.rect(surface, self.color_bg, self.rect)
+        pygame.draw.rect(surface, self.color_border, self.rect, 1)
+        
+        text = "Select..."
+        if self.selected_idx >= 0 and self.selected_idx < len(self.options):
+            text = self.options[self.selected_idx]['name']
+        
+        # Truncate text if too long
+        if len(text) > 25: text = text[:22] + "..."
+        
+        surf = self.font.render(text, True, (255, 255, 255))
+        surface.blit(surf, (self.rect.x + 5, self.rect.y + 8))
+        
+        # Arrow
+        pygame.draw.polygon(surface, (200, 200, 200), [
+            (self.rect.right - 15, self.rect.y + 10),
+            (self.rect.right - 5, self.rect.y + 10),
+            (self.rect.right - 10, self.rect.y + 20)
+        ])
+
+        # Draw Open List
+        if self.is_open:
+            visible_count = min(len(self.options), self.max_visible)
+            list_h = visible_count * self.item_height
+            list_rect = pygame.Rect(self.rect.x, self.rect.bottom, self.rect.width, list_h)
+            
+            # Background
+            pygame.draw.rect(surface, (25, 25, 30), list_rect)
+            pygame.draw.rect(surface, self.color_border, list_rect, 1)
+            
+            mx, my = pygame.mouse.get_pos()
+            
+            # Draw Items
+            for i in range(visible_count):
+                real_idx = i + self.scroll_offset
+                if real_idx >= len(self.options): break
+                
+                opt = self.options[real_idx]
+                item_y = list_rect.y + (i * self.item_height)
+                item_rect = pygame.Rect(list_rect.x, item_y, list_rect.width, self.item_height)
+                
+                # Hover
+                if item_rect.collidepoint((mx, my)):
+                    pygame.draw.rect(surface, self.color_hover, item_rect)
+                
+                # Selection Highlight
+                if real_idx == self.selected_idx:
+                     pygame.draw.rect(surface, (50, 80, 50), item_rect, 1)
+
+                label = opt['name']
+                if len(label) > 30: label = label[:27] + "..."
+                
+                txt = self.font.render(label, True, (220, 220, 220))
+                surface.blit(txt, (item_rect.x + 5, item_rect.y + 8))
+
+            # Draw Scrollbar
+            if len(self.options) > self.max_visible:
+                sb_width = 8
+                sb_track = pygame.Rect(list_rect.right - sb_width, list_rect.top, sb_width, list_rect.height)
+                pygame.draw.rect(surface, (40, 40, 50), sb_track)
+                
+                # Thumb
+                ratio = visible_count / len(self.options)
+                thumb_h = max(20, list_rect.height * ratio)
+                scroll_ratio = self.scroll_offset / (len(self.options) - visible_count)
+                thumb_y = list_rect.top + scroll_ratio * (list_rect.height - thumb_h)
+                
+                sb_thumb = pygame.Rect(list_rect.right - sb_width, thumb_y, sb_width, thumb_h)
+                pygame.draw.rect(surface, (150, 150, 150), sb_thumb, border_radius=4)
+
+class Dropdown_old:
     def __init__(self, x, y, w, h, font, options, initial_id=None):
         self.rect = pygame.Rect(x, y, w, h)
         self.font = font
@@ -402,3 +536,121 @@ class StructureBrowser_old:
             btn.draw(surface)
         surface.set_clip(None)
 
+class UIScrollPanel:
+    def __init__(self, x, y, w, h, content_height):
+        self.rect = pygame.Rect(x, y, w, h)
+        self.content_height = max(content_height, h)
+        self.surface = pygame.Surface((w, self.content_height))
+        self.surface.fill((40, 40, 50)) # Match panel BG
+        self.scroll_y = 0
+        self.dragging = False
+        
+        # Scrollbar
+        self.sb_width = 10
+        self.update_scrollbar()
+
+    def update_scrollbar(self):
+        ratio = self.rect.height / self.content_height
+        thumb_h = max(20, self.rect.height * ratio)
+        scroll_ratio = self.scroll_offset_ratio()
+        thumb_y = self.rect.y + (scroll_ratio * (self.rect.height - thumb_h))
+        self.sb_rect = pygame.Rect(self.rect.right - self.sb_width, thumb_y, self.sb_width, thumb_h)
+
+    def scroll_offset_ratio(self):
+        if self.content_height <= self.rect.height: return 0
+        return self.scroll_y / (self.content_height - self.rect.height)
+
+    def handle_event(self, event):
+        if event.type == pygame.MOUSEWHEEL:
+            if self.rect.collidepoint(pygame.mouse.get_pos()):
+                self.scroll_y -= event.y * 20
+                self.scroll_y = max(0, min(self.scroll_y, self.content_height - self.rect.height))
+                self.update_scrollbar()
+                return True # Consumed
+        return False
+
+    def draw_background(self):
+        self.surface.fill((40, 40, 50))
+
+    def draw_to_screen(self, screen):
+        # Blit the visible portion of the surface to the screen
+        area = pygame.Rect(0, self.scroll_y, self.rect.width, self.rect.height)
+        screen.blit(self.surface, self.rect, area)
+        
+        # Draw Scrollbar track and thumb
+        if self.content_height > self.rect.height:
+            track = pygame.Rect(self.rect.right - self.sb_width, self.rect.y, self.sb_width, self.rect.height)
+            pygame.draw.rect(screen, (30, 30, 35), track)
+            pygame.draw.rect(screen, (100, 100, 100), self.sb_rect, border_radius=5)
+
+
+import textwrap
+
+class Checkbox:
+    def __init__(self, x, y, size, label, font, checked=False):
+        self.rect = pygame.Rect(x, y, size, size)
+        self.label = label
+        self.font = font
+        self.checked = checked
+        
+    def handle_event(self, event):
+        if event.type == pygame.MOUSEBUTTONDOWN and self.rect.collidepoint(event.pos):
+            self.checked = not self.checked
+            return True
+        return False
+        
+    def draw(self, surface):
+        # Box
+        pygame.draw.rect(surface, (200, 200, 200), self.rect, 2)
+        if self.checked:
+            inner = self.rect.inflate(-6, -6)
+            pygame.draw.rect(surface, (100, 200, 100), inner)
+        
+        # Label
+        if self.label:
+            lbl = self.font.render(self.label, True, (220, 220, 220))
+            surface.blit(lbl, (self.rect.right + 10, self.rect.y + (self.rect.height//2 - lbl.get_height()//2)))
+
+class TextArea:
+    def __init__(self, x, y, w, h, font, text=''):
+        self.rect = pygame.Rect(x, y, w, h)
+        self.font = font
+        self.text = text
+        self.active = False
+        self.color_inactive = (60, 60, 70)
+        self.color_active = (30, 30, 40)
+        self.border_color = (100, 100, 120)
+
+    def handle_event(self, event):
+        if event.type == pygame.MOUSEBUTTONDOWN:
+            self.active = self.rect.collidepoint(event.pos)
+        
+        if event.type == pygame.KEYDOWN and self.active:
+            if event.key == pygame.K_BACKSPACE:
+                self.text = self.text[:-1]
+            elif event.key == pygame.K_RETURN:
+                self.text += '\n'
+            else:
+                self.text += event.unicode
+
+    def draw(self, surface):
+        # Draw BG
+        color = self.color_active if self.active else self.color_inactive
+        pygame.draw.rect(surface, color, self.rect)
+        pygame.draw.rect(surface, self.border_color, self.rect, 1)
+        
+        # Wrap and Draw Text
+        # Estimate chars per line based on width (approximate)
+        char_w = self.font.size('A')[0]
+        chars_per_line = max(10, (self.rect.width - 10) // char_w)
+        
+        lines = []
+        for paragraph in self.text.split('\n'):
+            lines.extend(textwrap.wrap(paragraph, width=chars_per_line))
+        
+        y_off = 5
+        for line in lines:
+            if y_off + self.font.get_height() > self.rect.height: break
+            ts = self.font.render(line, True, (255, 255, 255))
+            surface.blit(ts, (self.rect.x + 5, self.rect.y + y_off))
+            y_off += self.font.get_height() + 2

@@ -5,26 +5,26 @@ import random
 from codex_engine.controllers.base_controller import BaseController
 from codex_engine.ui.renderers.tactical.tactical_renderer import TacticalRenderer
 from codex_engine.generators.dungeon_content_manager import DungeonContentManager
-from codex_engine.ui.editors import get_text_input 
-from codex_engine.ui.widgets import Button, StructureBrowser
-from codex_engine.ui.info_panel import InfoPanel
+from codex_engine.ui.ai_request_editor import AIRequestEditor
 from codex_engine.ui.widgets import Button, StructureBrowser, ContextMenu
+from codex_engine.ui.generic_settings import GenericSettingsEditor
 from codex_engine.content.managers import TacticalContent
 from codex_engine.core.ai_manager import AIManager
 from codex_engine.config import SCREEN_WIDTH, SCREEN_HEIGHT, SIDEBAR_WIDTH
 
 class TacticalController(BaseController):
-    def __init__(self, db_manager, node_data, theme_manager):
+    def __init__(self, map_viewer, db_manager, node_data, theme_manager, ai_manager):
         super().__init__(db_manager, node_data, theme_manager)
-
+        self.map_viewer = map_viewer # Restore map_viewer reference
+        self.screen = map_viewer.screen # Get screen from map_viewer
+        
         self.dragging_map = False
         self.drag_start_pos = (0, 0)
         self.drag_start_cam = (0, 0)
 
         self.zoom_factor = 1.05
-        self.ai = AIManager()
+        self.ai = ai_manager
         
-        # Geometry setup
         geo = self.node['geometry_data']
         self.grid_data = geo.get('grid', [[]])
         self.markers = self.db.get_markers(self.node['id'])
@@ -49,8 +49,8 @@ class TacticalController(BaseController):
         self.font_small = pygame.font.Font(None, 20)
         
         self.content_manager = TacticalContent(self.db, self.node)
-        self.info_panel = InfoPanel(self.content_manager, self.db, self.node, self.font_ui, self.font_small)
         self.structure_browser = None
+        self.dungeon_content_manager = DungeonContentManager(self.node, self.db, self.ai)
 
         style = self.node['metadata'].get('render_style', 'hand_drawn')
         self.renderer = TacticalRenderer(self.node, self.cell_size, style)
@@ -82,18 +82,73 @@ class TacticalController(BaseController):
         self.btn_reset_view = Button(20, 140, full_w, 30, "Reset View", self.font_ui, (100,150,200), (150,200,250), (255,255,255), self._reset_view)
         self.btn_regen      = Button(20, 180, full_w, 30, "Regenerate Layout", self.font_ui, (150,100,100), (200,150,150), (255,255,255), self._regenerate_map)
         self.btn_gen_details = Button(20, 220, full_w, 30, "AI Gen Content", self.font_ui, (100,100,200), (150,150,250), (255,255,255), self._generate_ai_details)
+        self.btn_settings = Button(20, 260, full_w, 30, "Map Settings", self.font_ui, (100, 100, 100), (120, 120, 120), (255, 255, 255), self.open_map_settings)
 
         self.structure_browser = StructureBrowser(20, 140, full_w, 400, self.db, self.node['id'], self.font_small, lambda nid: {"action": "transition_node", "node_id": nid})
+
+    def open_map_settings(self):
+        chain = [('node', self.node['id']), ('campaign', self.node['campaign_id'])]
+        GenericSettingsEditor(pygame.display.get_surface(), self.ai.config, self.ai, context_chain=chain)
 
     def _set_tab(self, t): self.active_tab = t
     def _set_brush(self, val): self.active_brush = val
     def _go_up_level(self): return {"action": "go_up_level"}
+
+    def get_visible_room_markers(self):
+        """Returns a list of room markers currently inside the camera viewport."""
+        sc = self.cell_size
+        screen_w_world = self.screen.get_width() / (self.map_viewer.zoom * sc)
+        screen_h_world = self.screen.get_height() / (self.map_viewer.zoom * sc)
+        
+        view_rect = pygame.Rect(
+            self.map_viewer.cam_x - screen_w_world / 2,
+            self.map_viewer.cam_y - screen_h_world / 2,
+            screen_w_world,
+            screen_h_world
+        )
+        
+        return [
+            m for m in self.markers 
+            if m['symbol'] == 'room_number' and view_rect.collidepoint(m['world_x'], m['world_y'])
+        ]
+    
     def _generate_ai_details(self):
         if self.node['type'] == 'dungeon_level':
-            theme_prompt = get_text_input("Enter a theme for the rooms (e.g., 'Goblin infested'):")
-            if not theme_prompt or not theme_prompt.strip(): return None
-            manager = DungeonContentManager(self.node, self.db, self.ai)
-            if manager.populate_descriptions(theme=theme_prompt): return {"action": "reload_node"}
+            visible_markers = self.get_visible_room_markers()
+            if not visible_markers:
+                print("No room markers visible on screen.")
+                return None
+            
+            print(f"[CONTROLLER] Found {len(visible_markers)} visible room markers.")
+
+            def on_generation_complete(result):
+                print(f"[CALLBACK in Controller] Received result for {len(visible_markers)} markers.")
+                if result:
+                    for m in visible_markers:
+                        if m['title'] in result:
+                            self.db.update_marker(m['id'], description=result[m['title']])
+                    pygame.event.post(pygame.event.Event(pygame.USEREVENT, {"action": "reload_node"}))
+                else:
+                    print("[CALLBACK in Controller] AI generation failed.")
+
+            chain = [('node', self.node['id']), ('campaign', self.node['campaign_id'])]
+            editor = AIRequestEditor(pygame.display.get_surface(), self.ai.config, self.ai, chain, "Dungeon Theme")
+            
+            if editor.result:
+                prompt, svc, model, persist = editor.result
+                if persist:
+                    scope, scope_id = chain[0]
+                    self.ai.config.set("active_service_id", svc, scope, scope_id)
+                    self.ai.config.set(f"service_{svc}_model", model, scope, scope_id)
+                
+                context = {"name": self.node['name'], "rooms": [{'title': m['title']} for m in visible_markers]}
+                self.dungeon_content_manager.start_generation(
+                    theme=prompt, 
+                    context_for_ai=context,
+                    callback=on_generation_complete,
+                    service_override=svc, 
+                    model_override=model
+                )
         return None
 
     def update(self):
@@ -104,11 +159,12 @@ class TacticalController(BaseController):
         self.btn_tab_loc.base_color = ac if self.active_tab == "LOC" else ic
         self.btn_tab_config.base_color = ac if self.active_tab == "CONFIG" else ic
         if self.active_tab == "TOOLS": self.widgets.extend(self.brush_buttons)
-        elif self.active_tab == "INFO": self.widgets.extend(self.info_panel.widgets)
-        elif self.active_tab == "CONFIG": self.widgets.extend([self.btn_reset_view, self.btn_regen, self.btn_gen_details])
+        elif self.active_tab == "CONFIG": self.widgets.extend([self.btn_reset_view, self.btn_regen, self.btn_gen_details, self.btn_settings])
 
     def handle_input(self, event, cam_x, cam_y, zoom):
-        # Handle context menu first
+        if event.type == pygame.USEREVENT and event.dict.get("action") == "reload_node":
+            return {"action": "reload_node"}
+
         if self.context_menu:
             if self.context_menu.handle_event(event):
                 self.context_menu = None
@@ -118,7 +174,6 @@ class TacticalController(BaseController):
             res = w.handle_event(event)
             if res: return res if isinstance(res, dict) else None
         
-        if self.active_tab == "INFO" and self.info_panel.handle_event(event): return None
         if self.active_tab == "LOC":
             res = self.structure_browser.handle_event(event)
             if res: return res
@@ -126,7 +181,6 @@ class TacticalController(BaseController):
         center_x, center_y = SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2
         sc = self.cell_size
 
-        # --- MOUSE MOTION ---
         if event.type == pygame.MOUSEMOTION:
             world_x = ((event.pos[0] - center_x) / (zoom * sc)) + cam_x
             world_y = ((event.pos[1] - center_y) / (zoom * sc)) + cam_y
@@ -142,13 +196,12 @@ class TacticalController(BaseController):
                 dy = event.pos[1] - self.drag_start_pos[1]
                 return {"action": "pan", "pos": (self.drag_start_cam[0] - dx / (zoom * sc), self.drag_start_cam[1] - dy / (zoom * sc))}
 
-        # --- MOUSE DOWN ---
         if event.type == pygame.MOUSEBUTTONDOWN:
             if event.pos[0] < SIDEBAR_WIDTH: return None
             world_x = ((event.pos[0] - center_x) / (zoom * sc)) + cam_x
             world_y = ((event.pos[1] - center_y) / (zoom * sc)) + cam_y
 
-            if event.button == 1: # Left Click
+            if event.button == 1:
                 self.drag_start_pos = event.pos
                 self.drag_start_cam = (cam_x, cam_y)
 
@@ -167,23 +220,22 @@ class TacticalController(BaseController):
                 else: 
                     self.dragging_map = True
             
-            elif event.button == 3: # Right Click
+            elif event.button == 3:
                 if self.hovered_marker:
                     self._open_context_menu(event)
 
-        # --- MOUSE UP ---
         if event.type == pygame.MOUSEBUTTONUP and event.button == 1:
             drag_dist = math.hypot(event.pos[0] - self.drag_start_pos[0], event.pos[1] - self.drag_start_pos[1])
 
             if self.dragging_marker:
                 marker_being_dragged = self.dragging_marker
                 self.db.update_marker(marker_being_dragged['id'], world_x=marker_being_dragged['world_x'], world_y=marker_being_dragged['world_y'])
-                self.markers = self.db.get_markers(self.node['id']) # Refresh
+                self.markers = self.db.get_markers(self.node['id']) 
                 
                 is_view_marker = marker_being_dragged.get('metadata', {}).get('is_view_marker', False)
                 is_active = marker_being_dragged.get('metadata', {}).get('is_active', False)
 
-                if is_view_marker and is_active and drag_dist > 8: # Only trigger on actual drag
+                if is_view_marker and is_active and drag_dist > 8:
                     self.dragging_marker = None
                     return {"action": "update_player_view"}
             
@@ -206,15 +258,10 @@ class TacticalController(BaseController):
                 self.grid_data[r][c] = self.active_brush
                 self._render_static_map()
 
-
     def _open_context_menu(self, event):
         if self.hovered_marker:
             self.selected_marker = self.hovered_marker
-            menu_options = [
-                ("Edit Details", self._open_edit_modal),
-                ("", None),
-                ("Delete Marker", self._delete_selected_marker)
-            ]
+            menu_options = [("Edit Details", self._open_edit_modal), ("", None), ("Delete Marker", self._delete_selected_marker)]
             self.context_menu = ContextMenu(event.pos[0], event.pos[1], menu_options, self.font_ui)
     
     def _open_edit_modal(self):
@@ -230,12 +277,9 @@ class TacticalController(BaseController):
             self.selected_marker = None
     
     def _save_marker(self, mid, sym, title, note, meta):
-        if mid: 
-            self.db.update_marker(mid, symbol=sym, title=title, description=note, metadata=meta)
-        else: 
-            self.db.add_marker(self.node['id'], self.pending_click_pos[0], self.pending_click_pos[1], sym, title, note, meta)
-        self.markers = self.db.get_markers(self.node['id'])
-        self.selected_marker = None
+        if mid: self.db.update_marker(mid, symbol=sym, title=title, description=note, metadata=meta)
+        else: self.db.add_marker(self.node['id'], self.pending_click_pos[0], self.pending_click_pos[1], sym, title, note, meta)
+        self.markers = self.db.get_markers(self.node['id']); self.selected_marker = None
 
     def _create_new_marker(self, wx, wy):
         from codex_engine.ui.editors import NativeMarkerEditor
@@ -260,12 +304,10 @@ class TacticalController(BaseController):
             screen.blit(scaled_surf, (draw_x, draw_y))
 
     def draw_overlays(self, screen, cam_x, cam_y, zoom):
-        if self.active_tab == "INFO": self.info_panel.draw(screen)
-        elif self.active_tab == "LOC": self.structure_browser.draw(screen)
+        if self.active_tab == "LOC": self.structure_browser.draw(screen)
         self._draw_markers(screen, cam_x, cam_y, zoom)
         if self.hovered_marker: self._draw_tooltip(screen, pygame.mouse.get_pos())
-        if self.context_menu:
-            self.context_menu.draw(screen)
+        if self.context_menu: self.context_menu.draw(screen)
     
     def _draw_markers(self, screen, cam_x, cam_y, zoom):
         center_x, center_y = SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2
@@ -288,7 +330,7 @@ class TacticalController(BaseController):
             
             if m['symbol'] == 'room_number':
                 screen.blit(surf, rect)
-            else: # Render portals, etc.
+            else:
                 pygame.draw.circle(screen, (200, 200, 100), (sx, sy), 10)
 
     def _draw_tooltip(self, screen, pos):
@@ -309,69 +351,39 @@ class TacticalController(BaseController):
             y_off += s.get_height()
 
     def create_radial_gradient(self, radius):
-        """Creates a radial gradient (White/High-Alpha Center -> Transparent Edge)."""
         r_val = max(1, int(radius))
         surf = pygame.Surface((r_val * 2, r_val * 2), pygame.SRCALPHA)
-        
-        # Increase steps for smoother gradient
         steps = 50
-        
-        # Draw from Outside (Large Radius) to Inside (Small Radius)
-        # Painter's Algorithm: We draw the faint outer layers first, then the bright inner layers on top.
         for i in range(steps):
-            # t goes from 0.0 (Edge) to 1.0 (Center)
             t = i / float(steps - 1)
-            
-            # Radius shrinks as t increases
             current_r = int(r_val * (1 - t))
-            
-            # Alpha increases as we get closer to center
-            # Using t**2 makes the light "hot" in the center and fall off quickly
             alpha = int(255 * (t**2))
-            
             if current_r > 0:
-                # Draw white circle with calculated alpha
                 pygame.draw.circle(surf, (255, 255, 255, alpha), (r_val, r_val), current_r)
-            
         return surf
     
     def render_player_view_surface(self):
-        # 1. FIND ACTIVE MARKER & SETUP
         view_marker = next((m for m in self.markers if m.get('metadata', {}).get('is_view_marker') and m['metadata'].get('is_active')), None)
         if not view_marker or not self.renderer:
             return None
 
-        # Metadata
         meta = view_marker.get('metadata', {})
         radius = meta.get('radius', 15)
         zoom = meta.get('zoom', 1.5)
         
-        # Dimensions
         w, h = 1920, 1080
         center_x, center_y = w // 2, h // 2
         
-        # Render the base map
         temp_surface = pygame.Surface((w, h))
-        self.draw_map(
-            temp_surface,
-            view_marker['world_x'],
-            view_marker['world_y'],
-            zoom,
-            w, h
-        )
-
-        # --- RAYCASTING LIGHTING ---
+        self.draw_map(temp_surface, view_marker['world_x'], view_marker['world_y'], zoom, w, h)
 
         mx, my = view_marker['world_x'], view_marker['world_y']
         sc = self.cell_size * zoom
         px_radius = radius * sc
         
-        # Create gradient: High Alpha Center -> Low Alpha Edge
         light_gradient = self.create_radial_gradient(px_radius)
 
-        # 3. CAST RAYS
         polygon_points = []
-        # Double the rays for smoother edges
         num_rays =  7200
         step_angle = (2 * math.pi) / num_rays
         
@@ -380,11 +392,7 @@ class TacticalController(BaseController):
             sin_a = math.sin(angle)
             cos_a = math.cos(angle)
             
-            dist = 0
-            max_dist = radius
-            hit_wall = False
-            step_size = 0.1 
-            
+            dist, max_dist, step_size = 0, radius, 0.1 
             curr_x, curr_y = mx, my
             
             while dist < max_dist:
@@ -395,66 +403,32 @@ class TacticalController(BaseController):
                 grid_x, grid_y = int(curr_x), int(curr_y)
                 
                 if 0 <= grid_x < self.grid_width and 0 <= grid_y < self.grid_height:
-                    tile_val = self.grid_data[grid_y][grid_x]
-                    
-                    if tile_val == 0: 
-                        # --- THE FIX: PUSH INTO VOID ---
-                        # Add a small buffer (e.g. 0.3 grid units) so light bleeds onto the wall face
+                    if self.grid_data[grid_y][grid_x] == 0: 
                         overhang = 0.03 
                         curr_x += cos_a * overhang
                         curr_y += sin_a * overhang
-                        
-                        hit_wall = True
                         break
-                else:
-                    hit_wall = True
-                    break
+                else: break
             
             screen_x = center_x + (curr_x - mx) * sc
             screen_y = center_y + (curr_y - my) * sc
             polygon_points.append((screen_x, screen_y))
 
-        # 4. COMPOSITE
-        
-        # A. Darkness (Full Black Opaque)
         darkness = pygame.Surface((w, h), pygame.SRCALPHA)
         darkness.fill((0, 0, 0, 255))
         
-        # B. Light Shape Mask
         light_shape = pygame.Surface((w, h), pygame.SRCALPHA)
         light_shape.fill((0, 0, 0, 0))
         if len(polygon_points) > 2:
             pygame.draw.polygon(light_shape, (255, 255, 255, 255), polygon_points)
             
-        # C. Apply Gradient to Shape (Multiply)
-        # This trims the gradient to fit inside the walls
         grad_rect = light_gradient.get_rect(center=(center_x, center_y))
         light_shape.blit(light_gradient, grad_rect, special_flags=pygame.BLEND_RGBA_MULT)
         
-        # D. Cut Light from Darkness (Subtract)
-        # High alpha in light_shape removes alpha from darkness (making it transparent)
         darkness.blit(light_shape, (0, 0), special_flags=pygame.BLEND_RGBA_SUB)
         
-        # 5. Final Combine
         temp_surface.blit(darkness, (0, 0))
 
-        return temp_surface
-
-    def render_player_view_surface_old(self):
-        view_marker = next((m for m in self.markers if m.get('metadata', {}).get('is_view_marker') and m['metadata'].get('is_active')), None)
-        if not view_marker or not self.renderer:
-            return None
-
-        temp_surface = pygame.Surface((1920, 1080))
-        
-        self.draw_map(
-            temp_surface,
-            view_marker['world_x'],
-            view_marker['world_y'],
-            view_marker['metadata'].get('zoom', 1.5),
-            temp_surface.get_width(),
-            temp_surface.get_height()
-        )
         return temp_surface
 
     def get_metadata_updates(self): return {}

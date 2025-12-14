@@ -40,6 +40,15 @@ class DBManager:
                 FOREIGN KEY(parent_node_id) REFERENCES nodes(id)
             );""",
 
+            """CREATE TABLE IF NOT EXISTS settings (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                scope TEXT NOT NULL,       -- 'global', 'campaign', 'node'
+                scope_id INTEGER,          -- NULL for global, campaign_id, or node_id
+                key TEXT NOT NULL,
+                value TEXT,                -- JSON encoded value
+                UNIQUE(scope, scope_id, key)
+            );""",
+
             """CREATE TABLE IF NOT EXISTS markers (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 node_id INTEGER,
@@ -210,6 +219,66 @@ class DBManager:
         structure.sort(key=lambda x: x.get('depth', 0))
             
         return structure
+    
+    # --- Settings ---
+
+    def get_setting_raw(self, key: str, scope: str, scope_id: int = None):
+        """Gets a specific setting record without cascading."""
+        # FIX: Force None to 0 because SQLite UNIQUE constraints fail on NULLs
+        if scope_id is None: 
+            scope_id = 0
+            
+        with self.get_connection() as conn:
+            # Removed "IS NULL" check, now purely equality based
+            query = "SELECT value FROM settings WHERE scope=? AND key=? AND scope_id=?"
+            params = (scope, key, scope_id)
+                
+            row = conn.execute(query, params).fetchone()
+            return json.loads(row['value']) if row else None
+
+    def set_setting(self, key: str, value: any, scope: str, scope_id: int = None):
+        """Upserts a setting."""
+        # FIX: Force None to 0 to ensure ON CONFLICT triggers correctly
+        if scope_id is None: 
+            scope_id = 0
+        
+        val_json = json.dumps(value)
+        with self.get_connection() as conn:
+            conn.execute(
+                """INSERT INTO settings (scope, scope_id, key, value) 
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(scope, scope_id, key) 
+                DO UPDATE SET value=excluded.value""",
+                (scope, scope_id, key, val_json)
+            )
+            conn.commit()
+
+    def get_setting_raw_old(self, key: str, scope: str, scope_id: int = None):
+        """Gets a specific setting record without cascading."""
+        with self.get_connection() as conn:
+            query = "SELECT value FROM settings WHERE scope=? AND key=?"
+            params = [scope, key]
+            if scope_id is not None:
+                query += " AND scope_id=?"
+                params.append(scope_id)
+            else:
+                query += " AND scope_id IS NULL"
+                
+            row = conn.execute(query, tuple(params)).fetchone()
+            return json.loads(row['value']) if row else None
+
+    def set_setting_old(self, key: str, value: any, scope: str, scope_id: int = None):
+        """Upserts a setting."""
+        val_json = json.dumps(value)
+        with self.get_connection() as conn:
+            conn.execute(
+                """INSERT INTO settings (scope, scope_id, key, value) 
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(scope, scope_id, key) 
+                DO UPDATE SET value=excluded.value""",
+                (scope, scope_id, key, val_json)
+            )
+            conn.commit()
 
     # --- MARKERS ---
     def add_marker(self, node_id, wx, wy, symbol, title, desc="", metadata=None):

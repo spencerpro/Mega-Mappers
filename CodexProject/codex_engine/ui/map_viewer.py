@@ -5,9 +5,10 @@ from codex_engine.controllers.geo_controller import GeoController
 from codex_engine.controllers.tactical_controller import TacticalController
 
 class MapViewer:
-    def __init__(self, screen, theme_manager):
+    def __init__(self, screen, theme_manager, ai_manager):
         self.screen = screen
         self.theme = theme_manager
+        self.ai = ai_manager
         self.db = DBManager()
         
         self.cam_x, self.cam_y, self.zoom = 0, 0, 1.0
@@ -28,13 +29,11 @@ class MapViewer:
         geo = node_data.get('geometry_data', {})
         node_type = node_data.get('type', 'world_map')
         
-        # Dispatch controller
         if node_type in ['dungeon_level', 'building_interior', 'tactical_map', 'compound', 'dungeon_complex']:
-            self.controller = TacticalController(self.db, node_data, self.theme)
+            self.controller = TacticalController(self, self.db, node_data, self.theme, self.ai)
         else:
-            self.controller = GeoController(self.db, node_data, self.theme)
+            self.controller = GeoController(self, self.db, node_data, self.theme, self.ai)
 
-        # Restore Camera or set default
         if 'cam_x' in metadata:
             self.cam_x, self.cam_y = metadata['cam_x'], metadata['cam_y']
             self.zoom = metadata.get('zoom', 1.0)
@@ -43,26 +42,20 @@ class MapViewer:
             self.cam_y = geo.get('height', 30) / 2
             self.zoom = 1.0
         else:
-            # Default for geo maps
             map_w = metadata.get('width', SCREEN_WIDTH)
             map_h = metadata.get('height', SCREEN_HEIGHT)
             self.cam_x, self.cam_y = map_w / 2, map_h / 2
             self.zoom = 1.0
             
-        # --- PHASE 1: VIEW MARKER AUTO-CREATION ---
-        # 1. Check if a view marker already exists for this node
         markers = self.db.get_markers(self.current_node['id'])
         view_marker_exists = any(m['metadata'].get('is_view_marker') for m in markers)
 
-        # 2. If not, create one.
         if not view_marker_exists:
             print(f"No view marker found for Node {self.current_node['id']}. Creating one.")
             
-            # Default position is the center of the current camera view
             marker_x = self.cam_x
             marker_y = self.cam_y
             
-            # Default metadata
             view_meta = {
                 "is_view_marker": True,
                 "is_active": True,
@@ -75,19 +68,16 @@ class MapViewer:
                 self.current_node['id'], 
                 marker_x, 
                 marker_y,
-                'eye',          # Symbol
-                'Party View',   # Title
-                'The party\'s current position and view.', # Description
+                'eye',
+                'Party View',
+                'The party\'s current position and view.',
                 view_meta
             )
         
-        # 3. Reload controller data to include the new marker if it was created
-        # This will call get_markers() inside the controller's __init__ again
         if node_type in ['dungeon_level', 'building_interior', 'tactical_map', 'compound', 'dungeon_complex']:
-            self.controller = TacticalController(self.db, self.current_node, self.theme)
+            self.controller = TacticalController(self, self.db, self.current_node, self.theme, self.ai)
         else:
-            self.controller = GeoController(self.db, self.current_node, self.theme)
-
+            self.controller = GeoController(self, self.db, self.current_node, self.theme, self.ai)
 
     def handle_zoom(self, direction, mouse_pos):
         if not self.controller: return
@@ -121,20 +111,19 @@ class MapViewer:
         if not self.controller: return
         self.controller.update()
         self.controller.draw_map(self.screen, self.cam_x, self.cam_y, self.zoom, SCREEN_WIDTH, SCREEN_HEIGHT)
-        if self.show_ui: self._draw_sidebar()
+        if self.show_ui:
+            pygame.draw.rect(self.screen, (30,30,40), (0,0, SIDEBAR_WIDTH, SCREEN_HEIGHT))
+            pygame.draw.rect(self.screen, (100,100,100), (0,0, SIDEBAR_WIDTH, SCREEN_HEIGHT), 2)
+            if self.current_node: 
+                title = self.current_node.get('name', 'Unknown')
+                type_str = self.current_node.get('type', 'unknown').replace('_', ' ').title()
+                self.screen.blit(self.font_title.render(f"{title}", True, (255,255,255)), (20,15))
+                self.screen.blit(self.font_ui.render(f"({type_str})", True, (150,150,150)), (20,45))
+            if self.controller:
+                for widget in self.controller.widgets: widget.draw(self.screen)
+                
         self.controller.draw_overlays(self.screen, self.cam_x, self.cam_y, self.zoom)
         self._draw_scale_bar()
-
-    def _draw_sidebar(self):
-        pygame.draw.rect(self.screen, (30,30,40), (0,0, SIDEBAR_WIDTH, SCREEN_HEIGHT))
-        pygame.draw.rect(self.screen, (100,100,100), (0,0, SIDEBAR_WIDTH, SCREEN_HEIGHT), 2)
-        if self.current_node: 
-            title = self.current_node.get('name', 'Unknown')
-            type_str = self.current_node.get('type', 'unknown').replace('_', ' ').title()
-            self.screen.blit(self.font_title.render(f"{title}", True, (255,255,255)), (20,15))
-            self.screen.blit(self.font_ui.render(f"({type_str})", True, (150,150,150)), (20,45))
-        if self.controller:
-            for widget in self.controller.widgets: widget.draw(self.screen)
 
     def _draw_scale_bar(self):
         map_width_m = self.current_node.get('geometry_data', {}).get('width', 100)

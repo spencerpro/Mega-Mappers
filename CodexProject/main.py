@@ -11,10 +11,6 @@ def player_window_process(image_queue):
     import pygame
     
     pygame.init()
-
-    #pygame.event.set_allowed([pygame.QUIT])
-    
-    # Attempt to open on second display, otherwise create a large window
     try:
         if pygame.display.get_num_displays() > 1:
             screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN | pygame.NOFRAME, display=1)
@@ -40,7 +36,6 @@ def player_window_process(image_queue):
                 running = False
             elif event.type == pygame.VIDEORESIZE:
                 screen = pygame.display.set_mode(event.size, pygame.RESIZABLE)
-                # Force a redraw on resize
                 if current_image_surface:
                     scaled_image = pygame.transform.smoothscale(current_image_surface, screen.get_size())
                     screen.blit(scaled_image, (0, 0))
@@ -68,7 +63,6 @@ def player_window_process(image_queue):
                     scaled_image = pygame.transform.smoothscale(new_image, screen.get_size())
                     screen.blit(scaled_image, (0, 0))
                     pygame.display.flip()
-                    pygame.event.post(pygame.event.Event(pygame.WINDOWMAXIMIZED))
                 except Exception as e:
                     print(f"Player Window Error: Failed to display surface: {e}")
         
@@ -76,12 +70,12 @@ def player_window_process(image_queue):
     
     pygame.quit()
 
-# Main process Pygame import
 import pygame
-
 from codex_engine.config import SCREEN_WIDTH, SCREEN_HEIGHT
 from codex_engine.core.db_manager import DBManager
 from codex_engine.core.theme_manager import ThemeManager
+from codex_engine.core.config_manager import ConfigManager # <--- ADDED
+from codex_engine.core.ai_manager import AIManager         # <--- ADDED
 from codex_engine.ui.campaign_menu import CampaignMenu
 from codex_engine.ui.map_viewer import MapViewer
 from codex_engine.generators.world_gen import WorldGenerator
@@ -100,12 +94,14 @@ class CodexApp:
         self.clock = pygame.time.Clock()
         
         self.db = DBManager()
+        self.config = ConfigManager(self.db)
+        self.ai = AIManager(self.config)
         self.theme_manager = ThemeManager()
         
         self.state = "MENU"
         self.current_campaign = None
         
-        self.menu_screen = CampaignMenu(self.screen, self.db)
+        self.menu_screen = CampaignMenu(self.screen, self.db, self.config, self.ai)
         self.map_viewer = None
         
         try:
@@ -121,9 +117,25 @@ class CodexApp:
         size = image_surface.get_size()
         self.image_queue.put((image_string, size))
 
+    def _process_ai_callbacks(self):
+        """Checks for and executes any completed AI job callbacks."""
+        completed = self.ai.get_completed_callbacks()
+        for callback, result in completed: # Now a simple 2-part tuple
+            if callback:
+                callback(result)
+
+    def _process_ai_callbacks_old(self):
+        """Checks for and executes any completed AI job callbacks."""
+        completed = self.ai.get_completed_callbacks()
+        for callback, result in completed:
+            if callback:
+                callback(result)
+
     def run(self):
         running = True
         while running:
+            self._process_ai_callbacks()
+
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     running = False
@@ -141,7 +153,9 @@ class CodexApp:
             elif self.state == "GAME_WORLD":
                 if self.map_viewer:
                     self.map_viewer.draw()
-                
+
+            self._draw_ai_status()
+
             pygame.display.flip()
             self.clock.tick(60)
 
@@ -210,26 +224,6 @@ class CodexApp:
                     self.transition_to_node(result['node_id'])
 
     def render_and_update_player_view(self):
-        print("\n--- RENDER PLAYER VIEW ---")
-        if not self.map_viewer:
-            print("  [ERROR] MapViewer not initialized. Aborting.")
-            return
-        if not self.map_viewer.controller:
-            print("  [ERROR] Controller not initialized. Aborting.")
-            return
-
-        print("  [1] Calling controller's render_player_view_surface()...")
-        player_surface = self.map_viewer.controller.render_player_view_surface()
-        
-        if player_surface:
-            print(f"  [4] Controller returned a surface of size {player_surface.get_size()}.")
-            self.update_player_image(player_surface)
-            print("  [5] Surface sent to player window process.")
-        else:
-            print("  [4] Controller returned None. No update sent.")
-        print("--- END RENDER ---")
-
-    def render_and_update_player_view_old(self):
         if self.map_viewer and self.map_viewer.controller:
             player_surface = self.map_viewer.controller.render_player_view_surface()
             if player_surface:
@@ -303,12 +297,10 @@ class CodexApp:
         if not source_marker_id or not parent_id:
             print("Cannot regenerate: Node is missing source marker link."); return
         
-        # Delete all siblings
         siblings = self.db.get_structure_tree(current_node['id'])
         for sibling in siblings:
             self.db.delete_node_and_children(sibling['id'])
         
-        # Reset source marker
         markers = self.db.get_markers(parent_id)
         source_marker = next((m for m in markers if m['id'] == source_marker_id), None)
         if source_marker:
@@ -321,8 +313,9 @@ class CodexApp:
     def load_campaign(self, campaign_id, theme_id):
         self.current_campaign = self.db.get_campaign(campaign_id)
         self.theme_manager.load_theme(theme_id)
+        
         if not self.map_viewer:
-            self.map_viewer = MapViewer(self.screen, self.theme_manager)
+            self.map_viewer = MapViewer(self.screen, self.theme_manager, self.ai)
         
         world_node = self.db.get_node_by_coords(campaign_id, parent_id=None, x=0, y=0)
         if not world_node:
@@ -345,8 +338,27 @@ class CodexApp:
         self.screen.blit(text, rect)
         pygame.display.flip()
 
+    def _draw_ai_status(self):
+        # We check qsize() which is the number of items WAITING in the queue.
+        # This is the most direct and accurate counter.
+        count = self.ai.get_active_job_count()
+        
+        if count > 0:
+            font = pygame.font.Font(None, 24)
+            text_str = f"AI Jobs Queued: {count}"
+            text_surf = font.render(text_str, True, (255, 255, 100))
+            
+            # Position in top right
+            x = SCREEN_WIDTH - text_surf.get_width() - 20
+            y = 10
+            
+            bg_rect = text_surf.get_rect(topleft=(x, y)).inflate(10, 5)
+            
+            # Draw semi-transparent background and the text
+            pygame.draw.rect(self.screen, (0, 0, 0, 180), bg_rect, border_radius=5)
+            self.screen.blit(text_surf, (x + 5, y + 2))
+
 if __name__ == "__main__":
-    # Required for macOS and Windows to use multiprocessing with Pygame
     if sys.platform.startswith('win') or sys.platform.startswith('darwin'):
         multiprocessing.set_start_method('spawn', force=True)
     app = CodexApp()

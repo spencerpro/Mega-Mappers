@@ -2,12 +2,16 @@ import pygame
 import os
 from codex_engine.core.db_manager import DBManager
 from codex_engine.ui.widgets import Button, InputBox, SimpleDropdown, ContextMenu
+from codex_engine.ui.generic_settings import GenericSettingsEditor
 from codex_engine.config import SCREEN_HEIGHT, THEMES_DIR
 
 class CampaignMenu:
-    def __init__(self, screen, db_manager: DBManager):
+    def __init__(self, screen, db_manager: DBManager, config_manager, ai_manager):
         self.screen = screen
         self.db = db_manager
+        self.config = config_manager
+        self.ai = ai_manager
+        
         self.font_title = pygame.font.Font(None, 60)
         self.font_ui = pygame.font.Font(None, 32)
         self.c_bg = (40, 30, 20)
@@ -24,6 +28,10 @@ class CampaignMenu:
         button_y = SCREEN_HEIGHT - 100 
         self.btn_new = Button(50, button_y, 200, 50, "New Campaign", self.font_ui, (100, 200, 100), (150, 250, 150), (0,0,0), self.switch_to_create)
         
+        # --- FIXED SETTINGS BUTTON ---
+        self.btn_settings = Button(SCREEN_HEIGHT - 120, 20, 100, 30, "Settings", self.font_ui, (60, 60, 70), (80, 80, 90), (255, 255, 255), self.open_global_settings)
+        # -----------------------------
+
         self.btn_create = Button(800, 400, 200, 50, "Create World", self.font_ui, (100, 200, 100), (150, 250, 150), (0,0,0), self.do_create)
         self.btn_cancel = Button(1020, 400, 150, 50, "Cancel", self.font_ui, (200, 100, 100), (250, 150, 150), (0,0,0), self.switch_to_select)
         
@@ -32,6 +40,10 @@ class CampaignMenu:
 
         self.context_menu = None
         self.right_clicked_campaign = None
+
+    def open_global_settings(self):
+        # Open settings with no context chain -> Global Scope
+        GenericSettingsEditor(self.screen, self.config, self.ai, context_chain=[])
 
     def _load_themes(self):
         """Scans the themes directory for available .json files."""
@@ -76,6 +88,8 @@ class CampaignMenu:
             return
 
         if self.mode == "SELECT":
+            self.btn_settings.handle_event(event) # Handle settings click
+            
             if event.type == pygame.MOUSEBUTTONDOWN:
                 mx, my = event.pos; start_y = 150
                 for camp in self.campaign_list:
@@ -123,6 +137,7 @@ class CampaignMenu:
             
         if self.mode == "SELECT":
             self.btn_new.draw(self.screen)
+            self.btn_settings.draw(self.screen) # Draw Settings Button
             if self.selected_campaign_id:
                 instr = self.font_ui.render("Click Selected to Launch", True, (200, 200, 200))
                 self.screen.blit(instr, (400, SCREEN_HEIGHT - 85))
