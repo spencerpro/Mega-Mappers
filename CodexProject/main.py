@@ -70,6 +70,28 @@ def player_window_process(image_queue):
     
     pygame.quit()
 
+
+def server_process():
+    """Runs the FastAPI server using Uvicorn."""
+    import uvicorn
+    import sys
+    import os
+    
+    # 1. Force the current folder into the system path so Python finds 'codex_server'
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    sys.path.insert(0, current_dir)
+
+    # 2. Import the app object directly (Python handles the path finding now)
+    try:
+        from codex_server.main import app
+
+        print(">>> WEB SERVER STARTED: http://localhost:8000")
+
+        # 3. Pass the app object, NOT the string string
+        uvicorn.run(app, host="0.0.0.0", port=8000, log_level="warning")
+    except ImportError as e:
+        print(f"SERVER ERROR: Could not import codex_server. Check your folders. {e}")
+
 import pygame
 from codex_engine.config import SCREEN_WIDTH, SCREEN_HEIGHT
 from codex_engine.core.db_manager import DBManager
@@ -87,6 +109,10 @@ class CodexApp:
         self.image_queue = multiprocessing.Queue()
         self.player_process = multiprocessing.Process(target=player_window_process, args=(self.image_queue,))
         self.player_process.start()
+
+        # Start Web Server
+        self.server_process = multiprocessing.Process(target=server_process)
+        self.server_process.start()
         
         pygame.init()
         self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.RESIZABLE)
@@ -166,6 +192,11 @@ class CodexApp:
         self.player_process.join(timeout=2)
         if self.player_process.is_alive():
             self.player_process.terminate()
+
+        # Kill Web Server
+        if self.server_process.is_alive():
+            self.server_process.terminate()
+            self.server_process.join()
         
         pygame.quit()
         sys.exit()

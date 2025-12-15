@@ -55,7 +55,7 @@ class GeoController(BaseController):
         
         self.show_grid = True
         self.grid_type = "HEX"
-        self.grid_size = self.node['metadata'].get('grid_size', 64)
+        self.grid_size = float(self.node['metadata'].get('grid_size', 64))
 
         self.active_tab = "INFO" 
 
